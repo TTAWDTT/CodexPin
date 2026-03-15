@@ -29,6 +29,8 @@ body {
   flex-direction: column;
   justify-content: space-between;
   color: #f9fafb;
+  background: rgba(15, 23, 42, 0.94);
+  border-radius: 16px;
 }
 
 .widget-topbar {
