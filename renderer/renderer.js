@@ -46,17 +46,10 @@
     const elapsedSeconds = isIdle ? 0 : snapshot.session.elapsedSeconds;
     sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
 
-    const remainingMinutes =
-      snapshot.weeklyBudget.weeklyLimitMinutes - snapshot.weeklyBudget.weeklyUsedMinutes;
-    weeklyRemainingEl.textContent = formatRemaining(
-      snapshot.weeklyBudget.weeklyLimitMinutes,
-      snapshot.weeklyBudget.weeklyUsedMinutes,
-    );
-    if (remainingMinutes < 60) {
-      weeklyRemainingEl.classList.add('weekly-remaining--low');
-    } else {
-      weeklyRemainingEl.classList.remove('weekly-remaining--low');
-    }
+    // 顶栏右侧改为状态显示：工作中 / 待命中（纯本地，不再展示额度）
+    const statusText = isIdle ? '待命中' : '工作中';
+    weeklyRemainingEl.textContent = statusText;
+    weeklyRemainingEl.classList.remove('weekly-remaining--low');
 
     const lines = snapshot.statusLines;
     for (let i = 0; i < statusEls.length; i += 1) {
@@ -114,8 +107,20 @@
       });
     }
 
-    // For now we always start a fresh session on launch.
-    state.startSession('');
+    // 点击左侧时间区域，切换会话开始/结束，从而驱动周额度累积。
+    const timeClickTarget = sessionTimeEl.parentElement || sessionTimeEl;
+    if (timeClickTarget) {
+      timeClickTarget.addEventListener('click', () => {
+        const snapshotNow = state.getState();
+        if (snapshotNow.session.status === 'active') {
+          state.stopSession();
+        } else {
+          state.startSession('');
+        }
+        render();
+        void saveSnapshot();
+      });
+    }
 
     // Tick timer to keep elapsedSeconds up to date for active sessions.
     setInterval(() => {

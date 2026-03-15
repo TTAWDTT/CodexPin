@@ -60,8 +60,9 @@ body {
   color: #e5e7eb;
 }
 
+/* 保留状态文本样式类名占位，当前不再使用额度低提示色 */
 .widget-topbar .weekly-remaining--low {
-  color: #fb7185;
+  color: inherit;
 }
 @font-face {
   font-family: "LXGW WenKai";
