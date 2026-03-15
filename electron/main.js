@@ -9,6 +9,10 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 360,
     height: 220,
+    resizable: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -34,4 +38,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-

@@ -37,6 +37,7 @@ body {
   justify-content: space-between;
   font-size: 14px;
   font-weight: 500;
+  -webkit-app-region: drag;
 }
 
 .widget-status {
@@ -45,5 +46,5 @@ body {
   gap: 4px;
   font-size: 12px;
   color: #e5e7eb;
+  -webkit-app-region: no-drag;
 }
-
