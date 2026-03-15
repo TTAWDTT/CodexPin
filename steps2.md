@@ -10,7 +10,7 @@
   需要考虑路径长度（Windows）、并发写入（多 Codex 实例）、旧数据清理策略（例如 24 小时）。  
   验收指标：有一份明确的 JSON schema 示例（文档或注释形式），能用一两个具体样例说明：给定某个项目（如 `D:\Github\CodexPin`），如何从 `status.json` 一步定位到“最近一轮 turn 的 phase 和 details”。
 
-- [ ] 任务 3：设计 CodexPin Hook 脚本的输入输出约定  
+- [x] 任务 3：设计 CodexPin Hook 脚本的输入输出约定  
   要求：确定 hook 脚本（如 `codexpin-codex-hook.js` 或 `bun codexpin-hook.ts`）的：  
   - 调用方式：例如 `bun codexpin-hook.js '<JSON>'`，只接受一个 JSON 字符串参数；  
   - 需要解析的字段：`type`、`thread-id`、`turn-id`、`cwd`、`input-messages`、`last-assistant-message`；  
@@ -18,7 +18,7 @@
   - 失败策略：解析失败/写文件失败时静默退出，不影响 Codex 本身执行。  
   验收指标：文档中给出一个真实的 Codex notify 事件样例 JSON，并标注出 hook 会如何提取字段、输出到 CodexPin 的 `status.json` / `sessions/*.json`；同时说明在异常情况下 Codex 不会被我们阻塞。
 
-- [ ] 任务 4：设计安全的 `notify` 注册与串联方案  
+- [x] 任务 4：设计安全的 `notify` 注册与串联方案  
   要求：设计 `codexpin setup` 或类似命令的行为，包括：  
   - 如何读取并解析 `~/.codex/config.toml`；  
   - 如果已有 `notify`：如何把原有配置安全保存为 “original notify”，并将 CodexPin hook 放在当前链路最前/最后；  
@@ -69,4 +69,3 @@
     - 状态文件的结构与演进策略（version 字段）；  
     - 如何在未来扩展更多字段而不破坏现有版本。  
   验收指标：一个未参与实现的人在阅读文档后，能独立完成：安装 CodexPin → 注册 hook → 触发一轮 Codex 回合 → 看到小面板展示出对应阶段与细节的全过程，中间不需要你额外解释。
-

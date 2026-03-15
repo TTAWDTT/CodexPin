@@ -181,6 +181,16 @@ CodexPin must handle three cases when the user runs `codexpin setup`:
 3. **CodexPin hook already present in `notify`**  
    - `codexpin setup` is a no-op regarding `notify` (must be idempotent).
 
+In practice, `codexpin setup` is implemented as a small CLI that:
+
+- Locates `~/.codex/config.toml`.
+- Parses it via a TOML parser.
+- Reads the current `notify` array (if any).
+- If the current `notify` is already exactly the CodexPin hook command, it does nothing.
+- Otherwise:
+  - Saves the current `notify` array to `~/.codexpin/original-notify.json` (if it exists).
+  - Sets `notify` to the CodexPin hook command only, letting the hook script forward events to the original command.
+
 ### 4.2 Rollback / Uninstall
 
 CodexPin must define how to revert `notify`:
