@@ -18,7 +18,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "LXGW WenKai", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 #widget-root {
@@ -29,8 +29,10 @@ body {
   flex-direction: column;
   justify-content: space-between;
   color: #f9fafb;
-  background: rgba(15, 23, 42, 0.94);
+  background: rgba(15, 23, 42, 0.8);
   border-radius: 16px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(24px);
 }
 
 #widget-root[data-mode='compact'] .widget-status {
@@ -53,4 +55,11 @@ body {
   font-size: 12px;
   color: #e5e7eb;
   -webkit-app-region: no-drag;
+}
+@font-face {
+  font-family: "LXGW WenKai";
+  src: local("LXGW WenKai"),
+    url("../assets/fonts/LXGWWenKai-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
 }
