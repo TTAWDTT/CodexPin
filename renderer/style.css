@@ -64,6 +64,72 @@ body {
 .widget-topbar .weekly-remaining--low {
   color: inherit;
 }
+
+.status-line {
+  font-size: 12px;
+  line-height: 1.4;
+  position: relative;
+  padding-left: 14px;
+}
+
+.status-line--phase {
+  color: #f9fafb;
+  font-weight: 600;
+}
+
+.status-line--detail {
+  color: #e5e7eb;
+}
+
+.status-line--subtle {
+  color: #9ca3af;
+}
+
+.status-line--phase::before,
+.status-line--detail::before,
+.status-line--subtle::before {
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+}
+
+.status-line--phase::before {
+  content: '●';
+  font-size: 8px;
+  color: #22c55e;
+}
+
+.status-line--detail::before {
+  content: '›';
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.status-line--subtle::before {
+  content: '›';
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.status-line--active.status-line--phase::before {
+  animation: codexpin-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes codexpin-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+}
+
 @font-face {
   font-family: "LXGW WenKai";
   src: local("LXGW WenKai"),

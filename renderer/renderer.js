@@ -39,7 +39,7 @@
     return `${hours}h${minutes.toString().padStart(2, '0')}m`;
   }
 
-  function render() {
+  function renderFromState() {
     const snapshot = state.getState();
 
     const isIdle = snapshot.session.status !== 'active';
@@ -53,8 +53,17 @@
 
     const lines = snapshot.statusLines;
     for (let i = 0; i < statusEls.length; i += 1) {
-      if (!statusEls[i]) continue;
-      statusEls[i].textContent = lines[i] ?? '';
+      const el = statusEls[i];
+      if (!el) continue;
+      el.textContent = lines[i] ?? '';
+      // 状态模块场景下的回退样式：第一行更醒目，其余为细节。
+      if (i === 0) {
+        el.className = 'status-line status-line--phase';
+      } else if (i === 1) {
+        el.className = 'status-line status-line--detail';
+      } else {
+        el.className = 'status-line status-line--subtle';
+      }
     }
 
     const root = document.getElementById('widget-root');
@@ -90,9 +99,6 @@
 
     // If no status lines, seed an initial message.
     const snapshot = state.getState();
-    if (!snapshot.statusLines.length) {
-      state.appendStatusLine('CodexPin 就绪，当前为演示会话');
-    }
     if (!snapshot.mode) {
       state.setMode('full');
     }
@@ -108,28 +114,59 @@
     }
 
     // 点击左侧时间区域，切换会话开始/结束，从而驱动周额度累积。
-    const timeClickTarget = sessionTimeEl.parentElement || sessionTimeEl;
-    if (timeClickTarget) {
-      timeClickTarget.addEventListener('click', () => {
-        const snapshotNow = state.getState();
-        if (snapshotNow.session.status === 'active') {
-          state.stopSession();
-        } else {
-          state.startSession('');
+    // 周期性从 Codex 会话日志中拉取最新状态并更新 UI。
+    async function pollCodex() {
+      if (!bridge || typeof bridge.getCodexSession !== 'function') {
+        renderFromState();
+        return;
+      }
+
+      try {
+        const info = await bridge.getCodexSession();
+        if (!info || !info.hasSession) {
+          // 无活动会话时退回到本地状态渲染。
+          renderFromState();
+          return;
         }
-        render();
-        void saveSnapshot();
-      });
+
+        const isIdle = !info.isActive;
+        const elapsedSeconds = info.elapsedSeconds || 0;
+        sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
+        weeklyRemainingEl.textContent = isIdle ? '待命中' : '工作中';
+
+        const root = document.getElementById('widget-root');
+        if (root) {
+          root.dataset.mode = state.getState().mode || 'full';
+        }
+
+        const lines = Array.isArray(info.lines) ? info.lines : [];
+        for (let i = 0; i < statusEls.length; i += 1) {
+          const el = statusEls[i];
+          if (!el) continue;
+          el.textContent = lines[i] ?? '';
+          if (!lines[i]) {
+            el.className = 'status-line';
+            continue;
+          }
+          if (i === 0) {
+            el.className = `status-line status-line--phase${
+              info.isActive ? ' status-line--active' : ''
+            }`;
+          } else if (i === 1) {
+            el.className = 'status-line status-line--detail';
+          } else {
+            el.className = 'status-line status-line--subtle';
+          }
+        }
+      } catch {
+        renderFromState();
+      }
     }
 
-    // Tick timer to keep elapsedSeconds up to date for active sessions.
-    setInterval(() => {
-      state.tickElapsedSeconds();
-      render();
-      void saveSnapshot();
-    }, 1000);
+    // 初始拉取一次，然后定期轮询。
+    await pollCodex();
+    setInterval(pollCodex, 1500);
 
-    render();
     await saveSnapshot();
   }
 
