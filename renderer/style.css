@@ -56,6 +56,10 @@ body {
   color: #e5e7eb;
   -webkit-app-region: no-drag;
 }
+
+.widget-topbar .weekly-remaining--low {
+  color: #fb7185;
+}
 @font-face {
   font-family: "LXGW WenKai";
   src: local("LXGW WenKai"),

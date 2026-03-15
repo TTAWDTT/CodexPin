@@ -41,14 +41,21 @@
   function render() {
     const snapshot = state.getState();
 
-    const elapsedSeconds =
-      snapshot.session.status === 'active' ? snapshot.session.elapsedSeconds : 0;
-    sessionTimeEl.textContent = formatSessionTime(elapsedSeconds);
+    const isIdle = snapshot.session.status !== 'active';
+    const elapsedSeconds = isIdle ? 0 : snapshot.session.elapsedSeconds;
+    sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
 
+    const remainingMinutes =
+      snapshot.weeklyBudget.weeklyLimitMinutes - snapshot.weeklyBudget.weeklyUsedMinutes;
     weeklyRemainingEl.textContent = formatRemaining(
       snapshot.weeklyBudget.weeklyLimitMinutes,
       snapshot.weeklyBudget.weeklyUsedMinutes,
     );
+    if (remainingMinutes < 60) {
+      weeklyRemainingEl.classList.add('weekly-remaining--low');
+    } else {
+      weeklyRemainingEl.classList.remove('weekly-remaining--low');
+    }
 
     const lines = snapshot.statusLines;
     for (let i = 0; i < statusEls.length; i += 1) {
