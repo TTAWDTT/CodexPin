@@ -67,6 +67,89 @@ At no point will CodexPin:
 - Inspect or mutate internal Codex sqlite databases.
 - Block or modify Codex’s internal behavior.
 
+### 3.2 Example Payload and Resulting State
+
+Given a concrete `agent-turn-complete` payload:
+
+```jsonc
+{
+  "type": "agent-turn-complete",
+  "thread-id": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a6",
+  "turn-id": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a7",
+  "cwd": "D:\\\\Github\\\\CodexPin",
+  "input-messages": [
+    {
+      "role": "user",
+      "content": "请帮我实装 CodexPin 的 Codex hook 状态展示"
+    }
+  ],
+  "last-assistant-message": "已完成 CodexPin hook 实装\\n1. 解析 agent-turn-complete 事件\\n2. 写入 ~/.codexpin/codex-status/status.json"
+}
+```
+
+CodexPin hook will:
+
+1. Treat `"thread-id"` as `sessionId` and `"turn-id"` as `turnId`.
+2. Run its text segmentation logic on `last-assistant-message`, producing:
+   - `phase`: `"已完成 CodexPin hook 实装"`
+   - `details`: `["解析 agent-turn-complete 事件", "写入 ~/.codexpin/codex-status/status.json"]`
+   - `rawMessagePreview`: first 400 characters of the full assistant message.
+3. Update `~/.codexpin/codex-status/status.json`:
+
+```jsonc
+{
+  "version": 1,
+  "lastUpdated": 1773595334757,
+  "sessions": {
+    "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a6": {
+      "sessionId": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a6",
+      "workingDirectory": "D:\\\\Github\\\\CodexPin",
+      "startedAt": 1773595300000,
+      "endedAt": null,
+      "status": "active",
+      "lastEvent": {
+        "type": "turn_complete",
+        "timestamp": 1773595334757,
+        "phase": "已完成 CodexPin hook 实装",
+        "details": [
+          "解析 agent-turn-complete 事件",
+          "写入 ~/.codexpin/codex-status/status.json"
+        ],
+        "rawMessagePreview": "已完成 CodexPin hook 实装\\n1. 解析 agent-turn-complete 事件\\n2. 写入 ~/.codexpin/codex-status/status.json",
+        "turnId": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a7"
+      }
+    }
+  }
+}
+```
+
+4. Append a turn record to `~/.codexpin/codex-status/sessions/019cf283-b513-7cf2-a9ba-7a5f0bf6d3a6.json`:
+
+```jsonc
+{
+  "sessionId": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a6",
+  "workingDirectory": "D:\\\\Github\\\\CodexPin",
+  "startedAt": 1773595300000,
+  "endedAt": null,
+  "status": "active",
+  "title": "请帮我实装 CodexPin 的 Codex hook 状态展示",
+  "turns": [
+    {
+      "turnId": "019cf283-b513-7cf2-a9ba-7a5f0bf6d3a7",
+      "timestamp": 1773595334757,
+      "phase": "已完成 CodexPin hook 实装",
+      "details": [
+        "解析 agent-turn-complete 事件",
+        "写入 ~/.codexpin/codex-status/status.json"
+      ],
+      "rawMessagePreview": "已完成 CodexPin hook 实装\\n1. 解析 agent-turn-complete 事件\\n2. 写入 ~/.codexpin/codex-status/status.json"
+    }
+  ]
+}
+```
+
+All writes are atomic (temporary file + rename), and older sessions (older than 24h) may be pruned from both `status.json` and the `sessions/` directory as described in the state schema.
+
 ### 3.2 What CodexPin Will Not Do
 
 - Will not overwrite `~/.codex` data stores.
@@ -129,4 +212,3 @@ This design gives CodexPin enough signal to:
 - Show “current turn” summaries in the Electron widget,
 - Highlight whether Codex is “working” or “idle”,
 - Do so purely based on local data and officially exposed hooks.
-
