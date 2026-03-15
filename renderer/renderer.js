@@ -55,11 +55,26 @@
       if (!statusEls[i]) continue;
       statusEls[i].textContent = lines[i] ?? '';
     }
+
+    const root = document.getElementById('widget-root');
+    if (root) {
+      root.dataset.mode = snapshot.mode || 'full';
+    }
   }
 
   // Demo: start an initial untitled session and seed a status line so UI is not empty.
   state.startSession('');
   state.appendStatusLine('CodexPin 就绪，当前为演示会话');
+  state.setMode('full');
+
+  const topbar = document.querySelector('.widget-topbar');
+  if (topbar) {
+    topbar.addEventListener('dblclick', () => {
+      const current = state.getState().mode || 'full';
+      state.setMode(current === 'full' ? 'compact' : 'full');
+      render();
+    });
+  }
 
   // Tick timer to keep elapsedSeconds up to date for active sessions.
   setInterval(() => {

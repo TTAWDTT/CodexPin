@@ -1,8 +1,7 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose a minimal API surface for the renderer. We will extend this later.
 contextBridge.exposeInMainWorld('codexpin', {
-  // placeholder to verify preload wiring; real APIs will be added in later steps
-  ping: () => 'pong',
+  loadState: () => ipcRenderer.invoke('codexpin-load-state'),
+  saveState: (state) => ipcRenderer.invoke('codexpin-save-state', state),
 });
-

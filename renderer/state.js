@@ -46,6 +46,7 @@ const CodexPinStateFactory = () => {
       session: { ...state.session },
       weeklyBudget: { ...state.weeklyBudget },
       statusLines: [...state.statusLines],
+      mode: state.mode || 'full',
     };
   }
 
@@ -120,6 +121,10 @@ const CodexPinStateFactory = () => {
     state.weeklyBudget.weekStartDate = getCurrentWeekStartISO();
   }
 
+  function setMode(mode) {
+    state.mode = mode === 'compact' ? 'compact' : 'full';
+  }
+
   // Test-only reset to ensure deterministic tests.
   function resetForTest() {
     const fresh = initialState();
@@ -137,6 +142,7 @@ const CodexPinStateFactory = () => {
     appendStatusLine,
     tickElapsedSeconds,
     resetWeeklyBudget,
+    setMode,
     resetForTest,
     // Test-only escape hatch to manipulate internals in Node tests.
     __unsafeGetInternalStateForTest: () => state,

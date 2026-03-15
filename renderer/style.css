@@ -33,6 +33,10 @@ body {
   border-radius: 16px;
 }
 
+#widget-root[data-mode='compact'] .widget-status {
+  display: none;
+}
+
 .widget-topbar {
   display: flex;
   align-items: center;
