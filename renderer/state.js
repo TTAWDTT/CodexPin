@@ -100,12 +100,13 @@ const CodexPinStateFactory = () => {
       return;
     }
     // Prefer using tracked elapsedSeconds (kept in sync via tickElapsedSeconds).
-    let elapsedMinutes = Math.floor(state.session.elapsedSeconds / 60);
-    if (elapsedMinutes <= 0) {
+    let elapsedSeconds = state.session.elapsedSeconds;
+    if (!elapsedSeconds || elapsedSeconds <= 0) {
       const now = Date.now();
       const elapsedMs = now - state.session.startTimeMs;
-      elapsedMinutes = Math.floor(elapsedMs / 60000);
+      elapsedSeconds = Math.floor(elapsedMs / 1000);
     }
+    const elapsedMinutes = Math.ceil(elapsedSeconds / 60);
 
     state.session.status = 'idle';
     state.session.startTimeMs = null;

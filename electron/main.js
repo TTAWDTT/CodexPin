@@ -26,6 +26,8 @@ async function createWindow(bounds) {
   const mainWindow = new BrowserWindow(windowOptions);
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // Ensure always-on-top behavior across platforms
+  mainWindow.setAlwaysOnTop(true, 'screen-saver');
 
   // Wire IPC handlers for state persistence and window bounds.
   const storageApi = storage || createStorage(app);
@@ -38,7 +40,7 @@ async function createWindow(bounds) {
     await storageApi.saveState(state);
   });
 
-  mainWindow.on('moved', async () => {
+  mainWindow.on('move', async () => {
     const bounds = mainWindow.getBounds();
     await storageApi.saveWindowBounds(bounds);
   });
