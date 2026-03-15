@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "description": "A lightweight always-on-top Codex progress widget that keeps users aware of task status while they switch to other work.",
   "main": "electron/main.js",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/state.test.js",
+    "lint": "echo \"No linter configured\"",
+    "build": "electron-builder"
   },
   "repository": {
     "type": "git",
@@ -21,5 +20,26 @@
   "bugs": {
     "url": "https://github.com/TTAWDTT/CodexPin/issues"
   },
-  "homepage": "https://github.com/TTAWDTT/CodexPin#readme"
+  "homepage": "https://github.com/TTAWDTT/CodexPin#readme",
+  "devDependencies": {
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.codexpin.widget",
+    "productName": "CodexPin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
 }
