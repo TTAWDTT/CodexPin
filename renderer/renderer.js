@@ -13,6 +13,7 @@
 
   // CodexPinState is attached as a global in state.js
   const state = window.CodexPinState || window.CodexPinStateFactory?.();
+  const bridge = window.codexpin;
   if (!state) {
     sessionTimeEl.textContent = '—';
     weeklyRemainingEl.textContent = '—';
@@ -69,25 +70,63 @@
     }
   }
 
-  // Demo: start an initial untitled session and seed a status line so UI is not empty.
-  state.startSession('');
-  state.appendStatusLine('CodexPin 就绪，当前为演示会话');
-  state.setMode('full');
-
-  const topbar = document.querySelector('.widget-topbar');
-  if (topbar) {
-    topbar.addEventListener('dblclick', () => {
-      const current = state.getState().mode || 'full';
-      state.setMode(current === 'full' ? 'compact' : 'full');
-      render();
-    });
+  async function saveSnapshot() {
+    if (!bridge || typeof bridge.saveState !== 'function') return;
+    const snapshot = state.getSerializableState();
+    try {
+      await bridge.saveState({ codexpinState: snapshot });
+    } catch {
+      // Persistence failures should not break the UI.
+    }
   }
 
-  // Tick timer to keep elapsedSeconds up to date for active sessions.
-  setInterval(() => {
-    state.tickElapsedSeconds();
-    render();
-  }, 1000);
+  async function bootstrap() {
+    // Load persisted state if available.
+    if (bridge && typeof bridge.loadState === 'function') {
+      try {
+        const persisted = await bridge.loadState();
+        if (persisted && persisted.codexpinState) {
+          state.setInitialState(persisted.codexpinState);
+        } else if (persisted) {
+          state.setInitialState(persisted);
+        }
+      } catch {
+        // Ignore load errors and start from clean state.
+      }
+    }
 
-  render();
+    // If no status lines, seed an initial message.
+    const snapshot = state.getState();
+    if (!snapshot.statusLines.length) {
+      state.appendStatusLine('CodexPin 就绪，当前为演示会话');
+    }
+    if (!snapshot.mode) {
+      state.setMode('full');
+    }
+
+    const topbar = document.querySelector('.widget-topbar');
+    if (topbar) {
+      topbar.addEventListener('dblclick', () => {
+        const current = state.getState().mode || 'full';
+        state.setMode(current === 'full' ? 'compact' : 'full');
+        render();
+        void saveSnapshot();
+      });
+    }
+
+    // For now we always start a fresh session on launch.
+    state.startSession('');
+
+    // Tick timer to keep elapsedSeconds up to date for active sessions.
+    setInterval(() => {
+      state.tickElapsedSeconds();
+      render();
+      void saveSnapshot();
+    }, 1000);
+
+    render();
+    await saveSnapshot();
+  }
+
+  void bootstrap();
 })();

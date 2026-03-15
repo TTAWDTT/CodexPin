@@ -4,6 +4,8 @@ const stateModule = require('../renderer/state');
 
 const {
   getState,
+  setInitialState,
+  getSerializableState,
   startSession,
   stopSession,
   setIdle,
@@ -75,6 +77,42 @@ function runTests() {
     setPhase('coding');
     const state = getState();
     assert.strictEqual(state.session.phase, 'coding', 'setPhase should update phase');
+  }
+
+  reset();
+  {
+    const internal = __unsafeGetInternalStateForTest();
+    const persisted = {
+      weeklyBudget: {
+        weekStartDate: internal.weeklyBudget.weekStartDate,
+        weeklyLimitMinutes: 300,
+        weeklyUsedMinutes: 42,
+      },
+      statusLines: ['A', 'B', 'C', 'D', 'E'],
+      mode: 'compact',
+    };
+    setInitialState(persisted);
+    const state = getState();
+    assert.strictEqual(
+      state.weeklyBudget.weeklyUsedMinutes,
+      42,
+      'setInitialState should restore weeklyUsedMinutes',
+    );
+    assert.strictEqual(state.mode, 'compact', 'setInitialState should restore mode');
+    assert.deepStrictEqual(
+      state.statusLines,
+      ['B', 'C', 'D', 'E'],
+      'setInitialState should keep last 4 status lines',
+    );
+  }
+
+  reset();
+  {
+    // getSerializableState should reflect current weeklyBudget and statusLines
+    appendStatusLine('X');
+    const serial = getSerializableState();
+    assert.ok(serial.weeklyBudget, 'getSerializableState should include weeklyBudget');
+    assert.ok(Array.isArray(serial.statusLines), 'getSerializableState should include statusLines array');
   }
 
   console.log('All state tests passed.');

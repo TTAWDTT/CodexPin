@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/TTAWDTT/CodexPin#readme",
   "devDependencies": {
+    "electron": "^31.0.0",
     "electron-builder": "^26.8.1"
   },
   "build": {

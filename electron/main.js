@@ -2,14 +2,10 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { createStorage } = require('./storage');
 
-/**
- * Creates the main CodexPin widget window.
- * For now this is a minimal Electron window that loads renderer/index.html.
- */
 let storage;
 
-async function createWindow() {
-  const mainWindow = new BrowserWindow({
+async function createWindow(bounds) {
+  const windowOptions = {
     width: 360,
     height: 220,
     resizable: false,
@@ -21,7 +17,13 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-  });
+  };
+
+  if (bounds && typeof bounds === 'object') {
+    Object.assign(windowOptions, bounds);
+  }
+
+  const mainWindow = new BrowserWindow(windowOptions);
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 

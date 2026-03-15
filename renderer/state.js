@@ -50,6 +50,41 @@ const CodexPinStateFactory = () => {
     };
   }
 
+  function setInitialState(persisted) {
+    if (!persisted || typeof persisted !== 'object') return;
+
+    if (persisted.weeklyBudget && typeof persisted.weeklyBudget === 'object') {
+      const { weekStartDate, weeklyLimitMinutes, weeklyUsedMinutes } = persisted.weeklyBudget;
+      if (typeof weekStartDate === 'string') {
+        state.weeklyBudget.weekStartDate = weekStartDate;
+      }
+      if (typeof weeklyLimitMinutes === 'number') {
+        state.weeklyBudget.weeklyLimitMinutes = weeklyLimitMinutes;
+      }
+      if (typeof weeklyUsedMinutes === 'number') {
+        state.weeklyBudget.weeklyUsedMinutes = weeklyUsedMinutes;
+      }
+      // Ensure we are not carrying over a previous week.
+      ensureWeek();
+    }
+
+    if (Array.isArray(persisted.statusLines)) {
+      state.statusLines = persisted.statusLines.slice(-4);
+    }
+
+    if (persisted.mode) {
+      setMode(persisted.mode);
+    }
+  }
+
+  function getSerializableState() {
+    return {
+      weeklyBudget: { ...state.weeklyBudget },
+      statusLines: [...state.statusLines],
+      mode: state.mode || 'full',
+    };
+  }
+
   function startSession(title = '') {
     ensureWeek();
     state.session.status = 'active';
@@ -135,6 +170,8 @@ const CodexPinStateFactory = () => {
 
   return {
     getState,
+    setInitialState,
+    getSerializableState,
     startSession,
     stopSession,
     setIdle,
