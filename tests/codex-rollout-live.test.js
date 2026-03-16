@@ -105,6 +105,47 @@ function testParseRolloutLinesTracksOpenTurn() {
   assert.strictEqual(result.currentTurnStartedAt, Date.parse('2026-03-16T02:30:00.000Z'));
 }
 
+function testParseRolloutLinesExtractsRateLimits() {
+  const lines = [
+    JSON.stringify({
+      timestamp: '2026-03-16T08:46:42.745Z',
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        rate_limits: {
+          primary: {
+            used_percent: 22.0,
+            window_minutes: 300,
+            resets_at: 1773665240,
+          },
+          secondary: {
+            used_percent: 16.0,
+            window_minutes: 10080,
+            resets_at: 1774229439,
+          },
+        },
+      },
+    }),
+  ];
+
+  const result = parseRolloutLines(lines);
+
+  assert.deepStrictEqual(result.rateLimits, {
+    fiveHour: {
+      usedPercent: 22,
+      remainingPercent: 78,
+      windowMinutes: 300,
+      resetsAt: 1773665240,
+    },
+    weekly: {
+      usedPercent: 16,
+      remainingPercent: 84,
+      windowMinutes: 10080,
+      resetsAt: 1774229439,
+    },
+  });
+}
+
 function testFindLatestRolloutFileForSession() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-'));
   const sessionsRoot = path.join(base, 'sessions');
@@ -137,6 +178,7 @@ function run() {
   testParseRolloutLinesPrefersAgentMessage();
   testParseRolloutLinesFallsBackToToolCall();
   testParseRolloutLinesTracksOpenTurn();
+  testParseRolloutLinesExtractsRateLimits();
   testFindLatestRolloutFileForSession();
   console.log('All Codex rollout live tests passed.');
 }

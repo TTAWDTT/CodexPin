@@ -33,6 +33,56 @@ function parseTimestamp(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeUsedPercent(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function normalizeRateLimitEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+
+  const usedPercent = normalizeUsedPercent(entry.used_percent);
+  const windowMinutes =
+    typeof entry.window_minutes === 'number' && Number.isFinite(entry.window_minutes)
+      ? entry.window_minutes
+      : null;
+  const resetsAt =
+    typeof entry.resets_at === 'number' && Number.isFinite(entry.resets_at)
+      ? entry.resets_at
+      : null;
+
+  if (usedPercent === null || windowMinutes === null) return null;
+
+  return {
+    usedPercent,
+    remainingPercent: Math.max(0, 100 - usedPercent),
+    windowMinutes,
+    resetsAt,
+  };
+}
+
+function extractRateLimits(rateLimits) {
+  if (!rateLimits || typeof rateLimits !== 'object') return null;
+
+  const entries = [
+    normalizeRateLimitEntry(rateLimits.primary),
+    normalizeRateLimitEntry(rateLimits.secondary),
+  ].filter(Boolean);
+
+  if (entries.length === 0) return null;
+
+  const result = {};
+  for (const entry of entries) {
+    if (entry.windowMinutes === 300) {
+      result.fiveHour = entry;
+    } else if (entry.windowMinutes === 10080) {
+      result.weekly = entry;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 function summarizeToolInput(input) {
   let value = input;
 
@@ -140,6 +190,7 @@ function parseRolloutLines(lines) {
     currentTurnStartedAt: 0,
     currentTurnCompleted: false,
     currentTurnCompletedAt: 0,
+    rateLimits: null,
     latestAgentMessage: null,
     latestToolCall: null,
     latestAssistantMessage: null,
@@ -171,6 +222,13 @@ function parseRolloutLines(lines) {
 
     if (!(entry.type === 'event_msg' && payload.type === 'token_count') && timestampMs) {
       state.lastActivityMs = Math.max(state.lastActivityMs, timestampMs);
+    }
+
+    if (entry.type === 'event_msg' && payload.type === 'token_count') {
+      const parsedRateLimits = extractRateLimits(payload.rate_limits);
+      if (parsedRateLimits) {
+        state.rateLimits = parsedRateLimits;
+      }
     }
 
     if (entry.type === 'event_msg' && payload.type === 'agent_message' && payload.message) {
@@ -238,6 +296,7 @@ function parseRolloutLines(lines) {
     currentTurnStartedAt: state.currentTurnStartedAt,
     currentTurnCompleted: state.currentTurnCompleted,
     currentTurnCompletedAt: state.currentTurnCompletedAt,
+    rateLimits: state.rateLimits,
     isTerminal: Boolean(state.terminalMs && state.terminalMs >= state.lastActivityMs),
     terminalMs: state.terminalMs,
   };
@@ -311,5 +370,6 @@ module.exports = {
     clampText,
     parseTimestamp,
     extractAssistantText,
+    extractRateLimits,
   },
 };

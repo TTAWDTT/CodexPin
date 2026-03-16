@@ -195,6 +195,7 @@ function getSessionStatus(options = {}) {
     turnId: session?.lastEvent?.turnId || null,
     sourceType: display.sourceType || null,
     rolloutFilePath: liveStatus?.rolloutFilePath || null,
+    rateLimits: liveStatus?.rateLimits || null,
   };
 }
 

@@ -333,6 +333,94 @@ function testKeepsWorkingWhenLatestTurnHasNotCompletedYet() {
   assert.strictEqual(result.elapsedSeconds, 45);
 }
 
+function testExposesRateLimitsFromLiveRollout() {
+  const rootDir = createTempRoot();
+  const codexRoot = createTempRoot();
+  const startedAt = Date.parse('2026-03-16T02:29:50.000Z');
+  const hookAt = Date.parse('2026-03-16T02:30:12.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: hookAt,
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt,
+        endedAt: hookAt,
+        status: 'active',
+        lastEvent: {
+          timestamp: hookAt,
+          phase: '测试已完成',
+          details: ['输出已经汇总完毕'],
+          rawMessagePreview: 'done',
+          turnId: 't-final',
+        },
+      },
+    },
+  });
+
+  writeRollout(codexRoot, 'latest', [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'latest',
+        timestamp: '2026-03-16T02:29:50.000Z',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:10.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        rate_limits: {
+          primary: {
+            used_percent: 22.0,
+            window_minutes: 300,
+            resets_at: 1773665240,
+          },
+          secondary: {
+            used_percent: 16.0,
+            window_minutes: 10080,
+            resets_at: 1774229439,
+          },
+        },
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:12.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'task_complete',
+      },
+    }),
+  ]);
+
+  const result = getSessionStatus({
+    rootDir,
+    codexRoot,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T02:30:13.000Z'),
+  });
+
+  assert.deepStrictEqual(result.rateLimits, {
+    fiveHour: {
+      usedPercent: 22,
+      remainingPercent: 78,
+      windowMinutes: 300,
+      resetsAt: 1773665240,
+    },
+    weekly: {
+      usedPercent: 16,
+      remainingPercent: 84,
+      windowMinutes: 10080,
+      resetsAt: 1774229439,
+    },
+  });
+}
+
 function run() {
   console.log('Running CodexPin status tests...');
   testReturnsNotConnectedWithoutStatusFile();
@@ -341,6 +429,7 @@ function run() {
   testPrefersLiveRolloutWhileSessionIsActive();
   testFallsBackToHookSummaryAfterTaskComplete();
   testKeepsWorkingWhenLatestTurnHasNotCompletedYet();
+  testExposesRateLimitsFromLiveRollout();
   console.log('All CodexPin status tests passed.');
 }
 

@@ -41,6 +41,10 @@ body {
   display: none;
 }
 
+#widget-root[data-mode='compact'] .widget-footer {
+  display: none;
+}
+
 .widget-topbar {
   display: flex;
   align-items: center;
@@ -61,6 +65,7 @@ body {
   font-size: 11px;
   color: #e5e7eb;
   min-height: 0;
+  flex: 1;
 }
 
 /* 保留状态文本样式类名占位，当前不再使用额度低提示色 */
@@ -116,6 +121,22 @@ body {
 
 .status-line--active.status-line--phase::before {
   animation: codexpin-pulse 1.4s ease-in-out infinite;
+}
+
+.widget-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #cbd5e1;
+  -webkit-app-region: no-drag;
+}
+
+.quota-chip {
+  opacity: 0.92;
+  letter-spacing: 0.01em;
 }
 
 @keyframes codexpin-pulse {

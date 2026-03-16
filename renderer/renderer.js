@@ -7,6 +7,8 @@
     document.getElementById('status-line-3'),
     document.getElementById('status-line-4'),
   ];
+  const quotaFiveHourEl = document.getElementById('quota-five-hour');
+  const quotaWeeklyEl = document.getElementById('quota-weekly');
 
   // Guard: if DOM is not ready for some reason, bail early.
   if (!sessionTimeEl || !statusTextEl) return;
@@ -61,6 +63,20 @@
         el.className = 'status-line status-line--subtle';
       }
     }
+  }
+
+  function renderRateLimits(rateLimits) {
+    if (!quotaFiveHourEl || !quotaWeeklyEl) return;
+
+    const fiveHour = rateLimits?.fiveHour;
+    const weekly = rateLimits?.weekly;
+
+    quotaFiveHourEl.textContent = fiveHour
+      ? `5h ${fiveHour.remainingPercent}%`
+      : '5h --';
+    quotaWeeklyEl.textContent = weekly
+      ? `Week ${weekly.remainingPercent}%`
+      : 'Week --';
   }
 
   function renderFromState() {
@@ -159,6 +175,7 @@
           [info.phase, ...(Array.isArray(info.details) ? info.details : [])],
           { active: Boolean(info.isActive) },
         );
+        renderRateLimits(info.rateLimits);
 
         previousSessionStatus = {
           integrationState: info.integrationState,
