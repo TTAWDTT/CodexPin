@@ -11,6 +11,7 @@ async function createWindow(bounds) {
     resizable: false,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
