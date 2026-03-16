@@ -9,6 +9,8 @@ const DISPLAY_PRIORITY = {
   tool_call: 2,
   assistant_message: 1,
 };
+const rolloutFileCache = new Map();
+const liveRolloutStatusCache = new Map();
 
 function safeJsonParse(value) {
   if (!value || typeof value !== 'string') return null;
@@ -201,6 +203,7 @@ function chooseDisplayCandidate(candidates) {
 function parseRolloutLines(lines) {
   const state = {
     sessionStartedAt: 0,
+    workingDirectory: '',
     lastActivityMs: 0,
     terminalMs: 0,
     currentTurnId: null,
@@ -229,6 +232,9 @@ function parseRolloutLines(lines) {
       if (startedAt && (!state.sessionStartedAt || startedAt < state.sessionStartedAt)) {
         state.sessionStartedAt = startedAt;
       }
+      if (typeof payload.cwd === 'string' && payload.cwd.trim()) {
+        state.workingDirectory = payload.cwd.trim();
+      }
     }
 
     if (entry.type === 'turn_context') {
@@ -236,6 +242,9 @@ function parseRolloutLines(lines) {
       state.currentTurnStartedAt = timestampMs || state.currentTurnStartedAt;
       state.currentTurnCompleted = false;
       state.currentTurnCompletedAt = 0;
+      if (!state.workingDirectory && typeof payload.cwd === 'string' && payload.cwd.trim()) {
+        state.workingDirectory = payload.cwd.trim();
+      }
     }
 
     if (!(entry.type === 'event_msg' && payload.type === 'token_count') && timestampMs) {
@@ -328,6 +337,7 @@ function parseRolloutLines(lines) {
     sourceType: display?.sourceType || '',
     sourceTimestampMs: display?.sourceTimestampMs || 0,
     lastActivityMs: state.lastActivityMs,
+    workingDirectory: state.workingDirectory,
     sessionStartedAt: state.sessionStartedAt,
     currentTurnId: state.currentTurnId,
     currentTurnStartedAt: state.currentTurnStartedAt,
@@ -353,6 +363,31 @@ function walkDirectory(rootDir, visitor) {
   }
 }
 
+function buildRolloutCacheKey(codexRoot, sessionId) {
+  return `${String(codexRoot || '')}::${String(sessionId || '')}`;
+}
+
+function normalizePathForMatch(input) {
+  if (!input || typeof input !== 'string') return '';
+
+  let normalized = input.trim().replace(/\//g, '\\');
+  if (normalized.startsWith('\\\\?\\')) {
+    normalized = normalized.slice(4);
+  }
+  normalized = normalized.replace(/\\+$/, '');
+  return normalized.toLowerCase();
+}
+
+function extractSessionIdFromRolloutPath(rolloutFilePath) {
+  const filename = path.basename(rolloutFilePath || '');
+  const match = filename.match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i,
+  );
+  if (!match) return '';
+
+  return match[1] || '';
+}
+
 function findLatestRolloutFileForSession(options = {}) {
   const codexRoot = options.codexRoot;
   const sessionId = options.sessionId;
@@ -360,6 +395,12 @@ function findLatestRolloutFileForSession(options = {}) {
 
   const sessionsRoot = path.join(codexRoot, 'sessions');
   if (!fs.existsSync(sessionsRoot)) return null;
+
+  const cacheKey = buildRolloutCacheKey(codexRoot, sessionId);
+  const cachedPath = rolloutFileCache.get(cacheKey);
+  if (cachedPath && fs.existsSync(cachedPath)) {
+    return cachedPath;
+  }
 
   let latestMatch = null;
   let latestSortKey = '';
@@ -382,6 +423,10 @@ function findLatestRolloutFileForSession(options = {}) {
     }
   });
 
+  if (latestMatch) {
+    rolloutFileCache.set(cacheKey, latestMatch);
+  }
+
   return latestMatch;
 }
 
@@ -389,13 +434,93 @@ function getLiveRolloutStatus(options = {}) {
   const rolloutFilePath = options.rolloutFilePath || findLatestRolloutFileForSession(options);
   if (!rolloutFilePath || !fs.existsSync(rolloutFilePath)) return null;
 
+  const cacheKey = rolloutFilePath.toLowerCase();
+  const stat = fs.statSync(rolloutFilePath);
+  const cached = liveRolloutStatusCache.get(cacheKey);
+  if (
+    cached &&
+    cached.mtimeMs === stat.mtimeMs &&
+    cached.size === stat.size
+  ) {
+    return {
+      ...cached.value,
+      details: Array.isArray(cached.value.details) ? [...cached.value.details] : [],
+    };
+  }
+
   const raw = fs.readFileSync(rolloutFilePath, 'utf8');
   const parsed = parseRolloutLines(raw.split(/\r?\n/));
-
-  return {
+  const result = {
     ...parsed,
     rolloutFilePath,
   };
+
+  liveRolloutStatusCache.set(cacheKey, {
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    value: result,
+  });
+
+  return result;
+}
+
+function listRolloutSessions(options = {}) {
+  const codexRoot = options.codexRoot;
+  const projectDir = options.projectDir || '';
+  if (!codexRoot) return [];
+
+  const sessionsRoot = path.join(codexRoot, 'sessions');
+  if (!fs.existsSync(sessionsRoot)) return [];
+
+  const normalizedProjectDir = normalizePathForMatch(projectDir);
+  const sessions = [];
+
+  walkDirectory(sessionsRoot, (fullPath, entry) => {
+    if (!entry.isFile()) return;
+    if (!entry.name.startsWith('rollout-') || !entry.name.endsWith('.jsonl')) return;
+
+    const sessionId = extractSessionIdFromRolloutPath(fullPath);
+    if (!sessionId) return;
+
+    const status = getLiveRolloutStatus({ rolloutFilePath: fullPath });
+    if (!status) return;
+
+    const workingDirectory = status.workingDirectory || '';
+    if (
+      normalizedProjectDir &&
+      normalizePathForMatch(workingDirectory) !== normalizedProjectDir
+    ) {
+      return;
+    }
+
+    const lastEventTimestamp =
+      status.sourceTimestampMs || status.lastActivityMs || status.terminalMs || status.sessionStartedAt || 0;
+
+    sessions.push({
+      sessionId,
+      workingDirectory,
+      startedAt: status.sessionStartedAt || 0,
+      endedAt: status.isTerminal ? status.terminalMs || lastEventTimestamp : null,
+      status: status.currentTurnCompleted === false || !status.isTerminal ? 'active' : 'completed',
+      lastEvent: {
+        timestamp: lastEventTimestamp,
+        phase: status.phase || '',
+        details: Array.isArray(status.details) ? status.details : [],
+        rawMessagePreview: status.rawMessagePreview || '',
+        turnId: status.currentTurnId || null,
+      },
+      rolloutFilePath: fullPath,
+      rateLimits: status.rateLimits || null,
+    });
+  });
+
+  sessions.sort((a, b) => {
+    const aTs = a?.lastEvent?.timestamp || 0;
+    const bTs = b?.lastEvent?.timestamp || 0;
+    return bTs - aTs;
+  });
+
+  return sessions;
 }
 
 module.exports = {
@@ -403,10 +528,14 @@ module.exports = {
   parseRolloutLines,
   findLatestRolloutFileForSession,
   getLiveRolloutStatus,
+  listRolloutSessions,
   __internal: {
     clampText,
     parseTimestamp,
     extractAssistantText,
     extractRateLimits,
+    extractSessionIdFromRolloutPath,
+    clearRolloutFileCache: () => rolloutFileCache.clear(),
+    clearLiveRolloutStatusCache: () => liveRolloutStatusCache.clear(),
   },
 };

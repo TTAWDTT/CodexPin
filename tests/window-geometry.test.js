@@ -10,7 +10,7 @@ function testReturnsDefaultSizeWithoutStoredBounds() {
   const result = normalizeWindowBounds();
 
   assert.strictEqual(result.width, DEFAULT_WIDGET_WIDTH);
-  assert.strictEqual(result.height, 164);
+  assert.strictEqual(result.height, DEFAULT_WIDGET_HEIGHT);
 }
 
 function testPreservesPositionButForcesNewWidgetSize() {
@@ -24,7 +24,7 @@ function testPreservesPositionButForcesNewWidgetSize() {
   assert.strictEqual(result.x, 1280);
   assert.strictEqual(result.y, 240);
   assert.strictEqual(result.width, DEFAULT_WIDGET_WIDTH);
-  assert.strictEqual(result.height, 164);
+  assert.strictEqual(result.height, DEFAULT_WIDGET_HEIGHT);
 }
 
 function run() {

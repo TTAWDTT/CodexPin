@@ -234,6 +234,10 @@ function updateCodexPinStateFromEvent(event, options = {}) {
   if (!existing.workingDirectory) {
     existing.workingDirectory = cwd;
   }
+  const title = deriveTitleFromInputMessages(event['input-messages']);
+  if (title) {
+    existing.title = title;
+  }
 
   existing.status = 'active';
   existing.lastEvent = {
@@ -273,10 +277,10 @@ function updateCodexPinStateFromEvent(event, options = {}) {
       workingDirectory: cwd,
       startedAt: existing.startedAt,
       endedAt: null,
-      status: 'active',
-      title: deriveTitleFromInputMessages(event['input-messages']),
-      turns: [],
-    };
+    status: 'active',
+    title,
+    turns: [],
+  };
   }
 
   if (!Array.isArray(sessionDoc.turns)) {

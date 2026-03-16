@@ -196,6 +196,10 @@
   },
   "active": "70efcd0a273cf9de",
   "lastOpenFiles": [
+    "plans/2026-03-17-window-resize-implementation.md",
+    "codexpin-state-schema.md",
+    "codexpin-hook-design.md",
+    "tests-checklist.md",
     "plans/2026-03-15-codexpin-electron-widget.md",
     "plans",
     "solution.md",

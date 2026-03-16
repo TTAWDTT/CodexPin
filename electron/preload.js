@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('codexpin', {
   loadState: () => ipcRenderer.invoke('codexpin-load-state'),
   retryInstallation: () => ipcRenderer.invoke('codexpin-retry-installation'),
   saveState: (state) => ipcRenderer.invoke('codexpin-save-state', state),
-  getSessionStatus: () => ipcRenderer.invoke('codexpin-get-session-status'),
+  getSessionStatus: (selectedSessionId) =>
+    ipcRenderer.invoke('codexpin-get-session-status', selectedSessionId),
+  getSessionList: () => ipcRenderer.invoke('codexpin-get-session-list'),
 });

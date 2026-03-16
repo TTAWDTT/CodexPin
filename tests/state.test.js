@@ -90,6 +90,7 @@ function runTests() {
       },
       statusLines: ['A', 'B', 'C', 'D', 'E'],
       mode: 'compact',
+      selectedSessionId: 'thread-2',
     };
     setInitialState(persisted);
     const state = getState();
@@ -98,7 +99,16 @@ function runTests() {
       42,
       'setInitialState should restore weeklyUsedMinutes',
     );
-    assert.strictEqual(state.mode, 'compact', 'setInitialState should restore mode');
+    assert.strictEqual(
+      state.mode,
+      'full',
+      'setInitialState should migrate compact mode back to full',
+    );
+    assert.strictEqual(
+      state.selectedSessionId,
+      'thread-2',
+      'setInitialState should restore selectedSessionId',
+    );
     assert.deepStrictEqual(
       state.statusLines,
       ['B', 'C', 'D', 'E'],
@@ -110,9 +120,15 @@ function runTests() {
   {
     // getSerializableState should reflect current weeklyBudget and statusLines
     appendStatusLine('X');
+    setInitialState({ selectedSessionId: 'thread-9' });
     const serial = getSerializableState();
     assert.ok(serial.weeklyBudget, 'getSerializableState should include weeklyBudget');
     assert.ok(Array.isArray(serial.statusLines), 'getSerializableState should include statusLines array');
+    assert.strictEqual(
+      serial.selectedSessionId,
+      'thread-9',
+      'getSerializableState should include selectedSessionId',
+    );
   }
 
   console.log('All state tests passed.');

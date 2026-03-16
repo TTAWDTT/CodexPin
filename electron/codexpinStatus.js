@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { getLiveRolloutStatus } = require('./codexRolloutLive');
+const { getLiveRolloutStatus, listRolloutSessions } = require('./codexRolloutLive');
 const { detectCodexProcess } = require('./codexProcessState');
 
 const ACTIVE_WINDOW_MS = 15 * 1000;
@@ -69,6 +69,117 @@ function findLatestSessionGlobally(statusIndex) {
   });
 
   return sessions[0];
+}
+
+function getVisibleSessions(statusIndex, options = {}) {
+  if (!statusIndex || !statusIndex.sessions) return [];
+
+  const sessions = Object.values(statusIndex.sessions);
+  if (sessions.length === 0) return [];
+
+  if (options.preferGlobalSession || !options.projectDir) {
+    return sessions.sort((a, b) => {
+      const aTs = a?.lastEvent?.timestamp || 0;
+      const bTs = b?.lastEvent?.timestamp || 0;
+      return bTs - aTs;
+    });
+  }
+
+  const target = normalizePathForMatch(options.projectDir);
+  return sessions
+    .filter((session) => {
+      const workingDirectory = normalizePathForMatch(session.workingDirectory);
+      return Boolean(target) && workingDirectory === target;
+    })
+    .sort((a, b) => {
+      const aTs = a?.lastEvent?.timestamp || 0;
+      const bTs = b?.lastEvent?.timestamp || 0;
+      return bTs - aTs;
+    });
+}
+
+function isLikelyCodexSessionId(sessionId) {
+  return typeof sessionId === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId.trim());
+}
+
+function mergeSessionRecords(baseSession, overrideSession) {
+  if (!baseSession) return overrideSession;
+  if (!overrideSession) return baseSession;
+
+  const baseTimestamp = baseSession?.lastEvent?.timestamp || 0;
+  const overrideTimestamp = overrideSession?.lastEvent?.timestamp || 0;
+  const preferredLastEvent = overrideTimestamp >= baseTimestamp
+    ? overrideSession.lastEvent
+    : baseSession.lastEvent;
+
+  return {
+    ...baseSession,
+    ...overrideSession,
+    startedAt: overrideSession.startedAt || baseSession.startedAt || 0,
+    endedAt: Object.prototype.hasOwnProperty.call(overrideSession, 'endedAt')
+      ? overrideSession.endedAt
+      : baseSession.endedAt,
+    lastEvent: preferredLastEvent,
+    title:
+      overrideSession.title ||
+      baseSession.title ||
+      preferredLastEvent?.phase ||
+      '',
+  };
+}
+
+function getMergedVisibleSessions(options = {}) {
+  const statusIndex = options.statusIndex || null;
+  const projectDir = options.projectDir || '';
+  const preferGlobalSession = Boolean(options.preferGlobalSession);
+  const codexRoot = options.codexRoot || path.join(os.homedir(), '.codex');
+  const rolloutSessions = listRolloutSessions({
+    codexRoot,
+    projectDir: preferGlobalSession ? '' : projectDir,
+  });
+  const rolloutSessionIds = new Set(rolloutSessions.map((session) => session.sessionId));
+  const visibleStatusSessions = getVisibleSessions(statusIndex, {
+    projectDir,
+    preferGlobalSession,
+  }).filter((session) => {
+    if (rolloutSessionIds.size === 0) {
+      return true;
+    }
+
+    return isLikelyCodexSessionId(session?.sessionId) || rolloutSessionIds.has(session?.sessionId);
+  });
+
+  const merged = new Map();
+
+  for (const rolloutSession of rolloutSessions) {
+    merged.set(rolloutSession.sessionId, rolloutSession);
+  }
+
+  for (const statusSession of visibleStatusSessions) {
+    const existing = merged.get(statusSession.sessionId) || null;
+    merged.set(statusSession.sessionId, mergeSessionRecords(existing, statusSession));
+  }
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const aTs = a?.lastEvent?.timestamp || 0;
+    const bTs = b?.lastEvent?.timestamp || 0;
+    return bTs - aTs;
+  });
+}
+
+function findSelectedVisibleSession(statusIndex, options = {}) {
+  if (!options.selectedSessionId) return null;
+
+  const visibleSessions = getMergedVisibleSessions({
+    statusIndex,
+    projectDir: options.projectDir,
+    preferGlobalSession: options.preferGlobalSession,
+    codexRoot: options.codexRoot,
+  });
+  return (
+    visibleSessions.find((session) => session.sessionId === options.selectedSessionId) || null
+  );
 }
 
 function buildNotConnectedState(message) {
@@ -138,6 +249,85 @@ function pickDisplayState({ hookDisplay, liveDisplay, liveTurnAheadOfHook, liveI
   };
 }
 
+function buildSessionListItem(session, nowMs) {
+  const lastEventTimestamp = session?.lastEvent?.timestamp || 0;
+  const rolloutStatus = session?.status || '';
+  const hasEnded = Boolean(session?.endedAt);
+  const isActive = rolloutStatus === 'active'
+    ? true
+    : rolloutStatus === 'completed'
+      ? false
+      : Boolean(lastEventTimestamp && nowMs - lastEventTimestamp <= ACTIVE_WINDOW_MS);
+
+  return {
+    sessionId: session.sessionId || null,
+    title:
+      session.title ||
+      session?.lastEvent?.phase ||
+      (session.sessionId ? `Thread ${session.sessionId.slice(0, 8)}` : 'Untitled thread'),
+    workingDirectory: session.workingDirectory || '',
+    isActive,
+    statusText: isActive ? '工作中' : hasEnded ? '待命中' : '待命中',
+    lastEventTimestamp,
+    phase: session?.lastEvent?.phase || '',
+  };
+}
+
+function findFallbackRateLimits(options = {}) {
+  const codexRoot = options.codexRoot;
+  const readLiveRolloutStatus = options.getLiveRolloutStatus || getLiveRolloutStatus;
+  if (!codexRoot) return null;
+
+  const rolloutSessions = listRolloutSessions({
+    codexRoot,
+    projectDir: '',
+  });
+
+  for (const rolloutSession of rolloutSessions) {
+    if (rolloutSession?.rateLimits) {
+      return rolloutSession.rateLimits;
+    }
+
+    if (!rolloutSession?.sessionId) {
+      continue;
+    }
+
+    const liveStatus = readLiveRolloutStatus({
+      codexRoot,
+      sessionId: rolloutSession.sessionId,
+      rolloutFilePath: rolloutSession.rolloutFilePath,
+    });
+
+    if (liveStatus?.rateLimits) {
+      return liveStatus.rateLimits;
+    }
+  }
+
+  return null;
+}
+
+function getSessionList(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const rootDir = options.rootDir || path.join(homeDir, '.codexpin', 'codex-status');
+  const projectDir =
+    Object.prototype.hasOwnProperty.call(options, 'projectDir')
+      ? options.projectDir
+      : process.cwd();
+  const nowMs = typeof options.nowMs === 'number' ? options.nowMs : Date.now();
+  const preferGlobalSession = Boolean(options.preferGlobalSession);
+  const codexRoot = options.codexRoot || path.join(homeDir, '.codex');
+
+  const statusIndex = loadStatusIndex(rootDir);
+  const visibleSessions = getMergedVisibleSessions({
+    statusIndex,
+    projectDir,
+    preferGlobalSession,
+    codexRoot,
+  });
+
+  return visibleSessions.map((session) => buildSessionListItem(session, nowMs));
+}
+
 function getSessionStatus(options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const rootDir = options.rootDir || path.join(homeDir, '.codexpin', 'codex-status');
@@ -150,10 +340,15 @@ function getSessionStatus(options = {}) {
   const hookInstalled = Boolean(options.hookInstalled);
   const notConnectedMessage = options.notConnectedMessage || '';
   const preferGlobalSession = Boolean(options.preferGlobalSession);
+  const selectedSessionId = options.selectedSessionId || null;
   const readProcessState =
     typeof options.detectCodexProcess === 'function'
       ? options.detectCodexProcess
       : detectCodexProcess;
+  const readLiveRolloutStatus =
+    typeof options.getLiveRolloutStatus === 'function'
+      ? options.getLiveRolloutStatus
+      : getLiveRolloutStatus;
 
   const statusIndex = loadStatusIndex(rootDir);
   if (!statusIndex) {
@@ -166,19 +361,41 @@ function getSessionStatus(options = {}) {
   }
 
   const session =
-    preferGlobalSession || !projectDir
+    findSelectedVisibleSession(statusIndex, {
+      projectDir,
+      preferGlobalSession,
+      selectedSessionId,
+      codexRoot,
+    }) ||
+    getMergedVisibleSessions({
+      statusIndex,
+      projectDir,
+      preferGlobalSession,
+      codexRoot,
+    })[0] ||
+    (preferGlobalSession || !projectDir
       ? findLatestSessionGlobally(statusIndex)
-      : findLatestSessionForDirectory(statusIndex, projectDir);
+      : findLatestSessionForDirectory(statusIndex, projectDir));
   if (!session) {
     const processState = readProcessState();
     return buildIdleState(processState);
   }
 
   const lastEventTimestamp = session?.lastEvent?.timestamp || 0;
-  const liveStatus = getLiveRolloutStatus({
-    codexRoot,
-    sessionId: session.sessionId,
-  });
+  const shouldReadLiveRollout = Boolean(
+    session?.sessionId &&
+      (
+        session.status === 'active' ||
+        !session.endedAt ||
+        (lastEventTimestamp && nowMs - lastEventTimestamp <= OPEN_TURN_STALE_MS)
+      ),
+  );
+  const liveStatus = shouldReadLiveRollout
+    ? readLiveRolloutStatus({
+        codexRoot,
+        sessionId: session.sessionId,
+      })
+    : null;
 
   const hookDisplay = buildDisplayFromHookEvent(session.lastEvent);
   const hookTurnId = session?.lastEvent?.turnId || null;
@@ -223,14 +440,12 @@ function getSessionStatus(options = {}) {
     0,
     Math.floor(((isActive ? nowMs : terminalTimestamp) - startedAt) / 1000),
   );
-  const processState = isActive ? { hasCodexProcess: true } : readProcessState();
-
-  if (!isActive && processState.hasCodexProcess === false) {
-    return {
-      ...buildIdleState(processState),
-      integrationState: 'connected',
-    };
-  }
+  const rateLimits =
+    liveStatus?.rateLimits ||
+    findFallbackRateLimits({
+      codexRoot,
+      getLiveRolloutStatus: readLiveRolloutStatus,
+    });
 
   return {
     integrationState: 'connected',
@@ -245,14 +460,20 @@ function getSessionStatus(options = {}) {
     turnId: session?.lastEvent?.turnId || null,
     sourceType: display.sourceType || null,
     rolloutFilePath: liveStatus?.rolloutFilePath || null,
-    rateLimits: liveStatus?.rateLimits || null,
+    rateLimits,
   };
 }
 
 module.exports = {
   getSessionStatus,
+  getSessionList,
   __internal: {
     findLatestSessionGlobally,
+    getVisibleSessions,
+    getMergedVisibleSessions,
+    findSelectedVisibleSession,
+    isLikelyCodexSessionId,
+    mergeSessionRecords,
     normalizePathForMatch,
     loadStatusIndex,
     findLatestSessionForDirectory,

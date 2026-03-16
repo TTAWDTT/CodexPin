@@ -18,6 +18,7 @@ const CodexPinStateFactory = () => {
       weeklyUsedMinutes: 0,
     },
     statusLines: [],
+    selectedSessionId: null,
   });
 
   const state = initialState();
@@ -47,6 +48,7 @@ const CodexPinStateFactory = () => {
       weeklyBudget: { ...state.weeklyBudget },
       statusLines: [...state.statusLines],
       mode: state.mode || 'full',
+      selectedSessionId: state.selectedSessionId || null,
     };
   }
 
@@ -75,6 +77,13 @@ const CodexPinStateFactory = () => {
     if (persisted.mode) {
       setMode(persisted.mode);
     }
+
+    if (
+      Object.prototype.hasOwnProperty.call(persisted, 'selectedSessionId') &&
+      (typeof persisted.selectedSessionId === 'string' || persisted.selectedSessionId === null)
+    ) {
+      state.selectedSessionId = persisted.selectedSessionId;
+    }
   }
 
   function getSerializableState() {
@@ -82,6 +91,7 @@ const CodexPinStateFactory = () => {
       weeklyBudget: { ...state.weeklyBudget },
       statusLines: [...state.statusLines],
       mode: state.mode || 'full',
+      selectedSessionId: state.selectedSessionId || null,
     };
   }
 
@@ -158,7 +168,13 @@ const CodexPinStateFactory = () => {
   }
 
   function setMode(mode) {
-    state.mode = mode === 'compact' ? 'compact' : 'full';
+    state.mode = 'full';
+  }
+
+  function setSelectedSessionId(sessionId) {
+    state.selectedSessionId = typeof sessionId === 'string' && sessionId.trim()
+      ? sessionId.trim()
+      : null;
   }
 
   // Test-only reset to ensure deterministic tests.
@@ -181,6 +197,7 @@ const CodexPinStateFactory = () => {
     tickElapsedSeconds,
     resetWeeklyBudget,
     setMode,
+    setSelectedSessionId,
     resetForTest,
     // Test-only escape hatch to manipulate internals in Node tests.
     __unsafeGetInternalStateForTest: () => state,

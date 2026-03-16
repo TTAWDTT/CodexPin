@@ -10,8 +10,36 @@
     <div id="widget-root">
       <div class="widget-topbar">
         <span id="session-time">0</span>
-        <span id="weekly-remaining" class="weekly-remaining">待命中</span>
+        <div class="thread-switcher">
+          <button
+            id="thread-trigger"
+            class="thread-trigger thread-trigger--disabled"
+            type="button"
+            aria-expanded="false"
+            aria-haspopup="listbox"
+          >
+            <span id="thread-indicator" class="thread-indicator thread-indicator--idle"></span>
+            <span id="thread-label" class="thread-label">待命中</span>
+            <span class="thread-chevron">▾</span>
+          </button>
+          <div
+            id="thread-menu"
+            class="thread-menu thread-menu--hidden"
+            role="listbox"
+            aria-label="Codex threads"
+          >
+            <div id="thread-menu-list" class="thread-menu-list"></div>
+            <div id="thread-menu-scrollbar" class="thread-menu-scrollbar" aria-hidden="true">
+              <div id="thread-menu-scrollbar-thumb" class="thread-menu-scrollbar-thumb"></div>
+            </div>
+          </div>
+        </div>
       </div>
+      <div
+        id="thread-overlay"
+        class="thread-overlay thread-overlay--hidden"
+        aria-hidden="true"
+      ></div>
       <div class="widget-status">
         <div id="status-line-1">CodexPin 初始化中...</div>
         <div id="status-line-2"></div>
@@ -28,6 +56,7 @@
     </div>
     <script src="./state.js"></script>
     <script src="./statusFeedback.js"></script>
+    <script src="./threadMenuModel.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

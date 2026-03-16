@@ -7,6 +7,9 @@ const {
   summarizeToolInput,
   parseRolloutLines,
   findLatestRolloutFileForSession,
+  getLiveRolloutStatus,
+  listRolloutSessions,
+  __internal,
 } = require('../electron/codexRolloutLive');
 
 function writeFile(filePath, content) {
@@ -212,6 +215,175 @@ function testFindLatestRolloutFileForSession() {
   assert.strictEqual(found, newer);
 }
 
+function testListRolloutSessionsFiltersByProjectDirectory() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-list-'));
+  const sessionId = '019cf1f1-4d8f-74d0-859b-0a653552d3b5';
+  const otherSessionId = '019cf1f1-4d8f-74d0-859b-0a653552d3b6';
+
+  writeFile(
+    path.join(
+      base,
+      'sessions',
+      '2026',
+      '03',
+      '17',
+      `rollout-2026-03-17T10-00-00-${sessionId}.jsonl`,
+    ),
+    [
+      JSON.stringify({
+        timestamp: '2026-03-17T10:00:00.000Z',
+        type: 'session_meta',
+        payload: {
+          id: sessionId,
+          timestamp: '2026-03-17T10:00:00.000Z',
+          cwd: 'D:\\Github\\CodexPin',
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-03-17T10:00:05.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          message: 'Alpha thread',
+          phase: 'commentary',
+        },
+      }),
+    ].join('\n'),
+  );
+
+  writeFile(
+    path.join(
+      base,
+      'sessions',
+      '2026',
+      '03',
+      '17',
+      `rollout-2026-03-17T10-00-00-${otherSessionId}.jsonl`,
+    ),
+    [
+      JSON.stringify({
+        timestamp: '2026-03-17T10:00:00.000Z',
+        type: 'session_meta',
+        payload: {
+          id: otherSessionId,
+          timestamp: '2026-03-17T10:00:00.000Z',
+          cwd: 'D:\\Github\\OtherProject',
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-03-17T10:00:05.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          message: 'Other thread',
+          phase: 'commentary',
+        },
+      }),
+    ].join('\n'),
+  );
+
+  const sessions = listRolloutSessions({
+    codexRoot: base,
+    projectDir: 'D:\\Github\\CodexPin',
+  });
+
+  assert.strictEqual(sessions.length, 1);
+  assert.strictEqual(sessions[0].sessionId, sessionId);
+  assert.strictEqual(sessions[0].workingDirectory, 'D:\\Github\\CodexPin');
+  assert.strictEqual(sessions[0].lastEvent.phase, 'Alpha thread');
+}
+
+function testFindLatestRolloutFileForSessionUsesCacheAfterFirstLookup() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-cache-'));
+  const sessionsRoot = path.join(base, 'sessions');
+  const sessionId = 'session-cache';
+  const target = path.join(
+    sessionsRoot,
+    '2026',
+    '03',
+    '17',
+    `rollout-2026-03-17T10-00-00-${sessionId}.jsonl`,
+  );
+
+  writeFile(target, '{}\n');
+  __internal.clearRolloutFileCache();
+
+  const first = findLatestRolloutFileForSession({
+    codexRoot: base,
+    sessionId,
+  });
+
+  const originalReaddirSync = fs.readdirSync;
+  fs.readdirSync = () => {
+    throw new Error('cache should avoid rescanning the rollout tree');
+  };
+
+  try {
+    const second = findLatestRolloutFileForSession({
+      codexRoot: base,
+      sessionId,
+    });
+    assert.strictEqual(first, target);
+    assert.strictEqual(second, target);
+  } finally {
+    fs.readdirSync = originalReaddirSync;
+    __internal.clearRolloutFileCache();
+  }
+}
+
+function testGetLiveRolloutStatusUsesParseCacheWhenFileIsUnchanged() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-live-cache-'));
+  const sessionId = 'session-live-cache';
+  const rolloutPath = path.join(
+    base,
+    'sessions',
+    '2026',
+    '03',
+    '17',
+    `rollout-2026-03-17T10-00-00-${sessionId}.jsonl`,
+  );
+
+  writeFile(
+    rolloutPath,
+    `${JSON.stringify({
+      timestamp: '2026-03-17T10:00:00.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        name: 'shell_command',
+        input: '{"command":"npm test"}',
+      },
+    })}\n`,
+  );
+
+  __internal.clearRolloutFileCache();
+  __internal.clearLiveRolloutStatusCache();
+
+  const first = getLiveRolloutStatus({
+    codexRoot: base,
+    sessionId,
+  });
+
+  const originalReadFileSync = fs.readFileSync;
+  fs.readFileSync = () => {
+    throw new Error('cached rollout status should avoid rereading unchanged file');
+  };
+
+  try {
+    const second = getLiveRolloutStatus({
+      codexRoot: base,
+      sessionId,
+    });
+    assert.strictEqual(first.phase, '调用工具 shell_command');
+    assert.strictEqual(second.phase, '调用工具 shell_command');
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+    __internal.clearRolloutFileCache();
+    __internal.clearLiveRolloutStatusCache();
+  }
+}
+
 function run() {
   console.log('Running Codex rollout live tests...');
   testSummarizeToolInput();
@@ -221,6 +393,9 @@ function run() {
   testParseRolloutLinesExtractsRateLimits();
   testParseRolloutLinesMarksAbortedTurnAsTerminal();
   testFindLatestRolloutFileForSession();
+  testListRolloutSessionsFiltersByProjectDirectory();
+  testFindLatestRolloutFileForSessionUsesCacheAfterFirstLookup();
+  testGetLiveRolloutStatusUsesParseCacheWhenFileIsUnchanged();
   console.log('All Codex rollout live tests passed.');
 }
 

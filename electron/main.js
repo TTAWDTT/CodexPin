@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { createStorage } = require('./storage');
-const { getSessionStatus } = require('./codexpinStatus');
+const { getSessionStatus, getSessionList } = require('./codexpinStatus');
 const { handleHookRuntime } = require('./hookRuntime');
 const { runInstallBootstrap } = require('./installBootstrap');
 const { normalizeWindowBounds } = require('./windowGeometry');
@@ -45,12 +45,24 @@ function registerIpcHandlers(storageApi) {
     await storageApi.saveState(state);
   });
 
-  ipcMain.handle('codexpin-get-session-status', async () => {
+  ipcMain.handle('codexpin-get-session-status', async (_event, selectedSessionId) => {
+    const normalizedSelectedSessionId =
+      typeof selectedSessionId === 'string' ? selectedSessionId : null;
+    const useGlobalSelection = Boolean(normalizedSelectedSessionId);
+
     return getSessionStatus({
       hookInstalled: installState.hookConfigured,
       notConnectedMessage: installState.message,
-      preferGlobalSession: app.isPackaged,
-      projectDir: app.isPackaged ? null : process.cwd(),
+      preferGlobalSession: app.isPackaged || useGlobalSelection,
+      projectDir: app.isPackaged || useGlobalSelection ? null : process.cwd(),
+      selectedSessionId: normalizedSelectedSessionId,
+    });
+  });
+
+  ipcMain.handle('codexpin-get-session-list', async () => {
+    return getSessionList({
+      preferGlobalSession: true,
+      projectDir: null,
     });
   });
 
