@@ -5,6 +5,7 @@ const path = require('path');
 
 const {
   buildDefaultHookCommand,
+  buildPackagedHookCommand,
   runCli,
 } = require('../scripts/codexpin-cli');
 
@@ -49,12 +50,21 @@ function testRunCliSetupAndUninstall() {
   );
 }
 
+function testBuildPackagedHookCommand() {
+  const command = buildPackagedHookCommand('C:\\Program Files\\CodexPin\\CodexPin.exe');
+  assert.deepStrictEqual(
+    command,
+    ['C:\\Program Files\\CodexPin\\CodexPin.exe', '--codex-hook'],
+    '打包模式下的 hook 命令应直接调用 CodexPin.exe --codex-hook',
+  );
+}
+
 function run() {
   console.log('Running CodexPin CLI tests...');
   testBuildDefaultHookCommand();
+  testBuildPackagedHookCommand();
   testRunCliSetupAndUninstall();
   console.log('All CodexPin CLI tests passed.');
 }
 
 run();
-

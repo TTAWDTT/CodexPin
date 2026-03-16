@@ -7,6 +7,7 @@ const TOML = require('@iarna/toml');
 
 const {
   ensureNotifyHook,
+  isNotifyHookConfigured,
   uninstallNotifyHook,
 } = require('../scripts/codexpinConfig');
 
@@ -159,13 +160,48 @@ function testUninstallRestoresOriginalOrRemovesNotify() {
   }
 }
 
+function testDetectsWhetherHookIsConfigured() {
+  const homeDir = createTempHome();
+  const hookCommand = ['node', 'C:/codexpin/hooks/codexpin-codex-hook.js'];
+
+  assert.strictEqual(
+    isNotifyHookConfigured({ homeDir, hookCommand }),
+    false,
+    '无 config.toml 时应视为未接入',
+  );
+
+  const codexDir = path.join(homeDir, '.codex');
+  fs.mkdirSync(codexDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(codexDir, 'config.toml'),
+    TOML.stringify({
+      notify: ['node', 'C:/other-hook.js'],
+    }),
+    'utf8',
+  );
+
+  assert.strictEqual(
+    isNotifyHookConfigured({ homeDir, hookCommand }),
+    false,
+    'notify 指向其他 hook 时应视为未接入',
+  );
+
+  ensureNotifyHook({ homeDir, hookCommand });
+
+  assert.strictEqual(
+    isNotifyHookConfigured({ homeDir, hookCommand }),
+    true,
+    'notify 指向 CodexPin hook 时应识别为已接入',
+  );
+}
+
 function run() {
   console.log('Running notify setup tests...');
   testSetupWithoutExistingConfig();
   testSetupWithExistingNotifyAndIdempotency();
   testUninstallRestoresOriginalOrRemovesNotify();
+  testDetectsWhetherHookIsConfigured();
   console.log('All notify setup tests passed.');
 }
 
 run();
-

@@ -50,6 +50,26 @@ function arraysEqual(a, b) {
   return true;
 }
 
+function buildPackagedHookCommand(executablePath) {
+  if (!executablePath || typeof executablePath !== 'string') {
+    throw new Error('executablePath must be a non-empty string');
+  }
+
+  return [executablePath, '--codex-hook'];
+}
+
+function isNotifyHookConfigured(options) {
+  const { homeDir, hookCommand } = options || {};
+  if (!Array.isArray(hookCommand) || hookCommand.length === 0) {
+    return false;
+  }
+
+  const { codexConfigPath } = getPaths(homeDir);
+  const config = readTomlConfig(codexConfigPath);
+  const existingNotify = Array.isArray(config.notify) ? config.notify : undefined;
+  return arraysEqual(existingNotify, hookCommand);
+}
+
 /**
  * 确保 Codex 的 config.toml 中已经注册 CodexPin hook：
  * - 无 notify 时：直接写入 CodexPin hook
@@ -167,13 +187,15 @@ function uninstallNotifyHook(options) {
 }
 
 module.exports = {
+  buildPackagedHookCommand,
   ensureNotifyHook,
+  isNotifyHookConfigured,
   uninstallNotifyHook,
   // 导出内部路径工具便于未来扩展或调试
   __internal: {
+    arraysEqual,
     getPaths,
     readTomlConfig,
     writeTomlConfig,
   },
 };
-

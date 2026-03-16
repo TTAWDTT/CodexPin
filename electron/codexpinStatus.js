@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 
 const { getLiveRolloutStatus } = require('./codexRolloutLive');
+const { detectCodexProcess } = require('./codexProcessState');
 
 const ACTIVE_WINDOW_MS = 15 * 1000;
 const OPEN_TURN_STALE_MS = 30 * 60 * 1000;
@@ -55,7 +56,7 @@ function findLatestSessionForDirectory(statusIndex, projectDir) {
   return matches[0];
 }
 
-function buildNotConnectedState() {
+function buildNotConnectedState(message) {
   return {
     integrationState: 'not_connected',
     hasSession: false,
@@ -63,21 +64,28 @@ function buildNotConnectedState() {
     elapsedSeconds: 0,
     statusText: '未接入',
     phase: '未接入 Codex Hook',
-    details: ['运行 codexpin setup 后，新的 Codex 回合会显示在这里。'],
+    details: [message || 'CodexPin 无法自动接入 Codex。'],
     rawMessagePreview: '',
   };
 }
 
-function buildIdleState() {
+function buildIdleState(options = {}) {
+  const hasCodexProcess = options.hasCodexProcess !== false;
+  const phase = hasCodexProcess ? '待命中' : '暂无 Codex 进程';
+  const details = hasCodexProcess
+    ? ['当前项目还没有收到新的 Codex Hook 事件。']
+    : ['启动 Codex 后，这里会显示当前任务进度。'];
+
   return {
     integrationState: 'idle',
     hasSession: false,
     isActive: false,
     elapsedSeconds: 0,
     statusText: '待命中',
-    phase: '待命中',
-    details: ['当前项目还没有收到新的 Codex Hook 事件。'],
+    phase,
+    details,
     rawMessagePreview: '',
+    hasCodexProcess,
   };
 }
 
@@ -121,15 +129,27 @@ function getSessionStatus(options = {}) {
   const codexRoot = options.codexRoot || path.join(homeDir, '.codex');
   const projectDir = options.projectDir || process.cwd();
   const nowMs = typeof options.nowMs === 'number' ? options.nowMs : Date.now();
+  const hookInstalled = Boolean(options.hookInstalled);
+  const notConnectedMessage = options.notConnectedMessage || '';
+  const readProcessState =
+    typeof options.detectCodexProcess === 'function'
+      ? options.detectCodexProcess
+      : detectCodexProcess;
 
   const statusIndex = loadStatusIndex(rootDir);
   if (!statusIndex) {
-    return buildNotConnectedState();
+    if (!hookInstalled) {
+      return buildNotConnectedState(notConnectedMessage);
+    }
+
+    const processState = readProcessState();
+    return buildIdleState(processState);
   }
 
   const session = findLatestSessionForDirectory(statusIndex, projectDir);
   if (!session) {
-    return buildIdleState();
+    const processState = readProcessState();
+    return buildIdleState(processState);
   }
 
   const lastEventTimestamp = session?.lastEvent?.timestamp || 0;
@@ -181,6 +201,14 @@ function getSessionStatus(options = {}) {
     0,
     Math.floor(((isActive ? nowMs : terminalTimestamp) - startedAt) / 1000),
   );
+  const processState = isActive ? { hasCodexProcess: true } : readProcessState();
+
+  if (!isActive && processState.hasCodexProcess === false) {
+    return {
+      ...buildIdleState(processState),
+      integrationState: 'connected',
+    };
+  }
 
   return {
     integrationState: 'connected',

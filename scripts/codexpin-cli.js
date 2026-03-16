@@ -3,6 +3,7 @@
 const path = require('path');
 
 const {
+  buildPackagedHookCommand,
   ensureNotifyHook,
   uninstallNotifyHook,
 } = require('./codexpinConfig');
@@ -96,7 +97,7 @@ if (require.main === module) {
 
 module.exports = {
   buildDefaultHookCommand,
+  buildPackagedHookCommand,
   parseArgs,
   runCli,
 };
-

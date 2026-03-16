@@ -114,9 +114,8 @@ function forwardToOriginalNotify(rawJsonArg, options = {}) {
   }
 }
 
-function main() {
+function runCodexHookArg(arg, options = {}) {
   try {
-    const arg = process.argv[2];
     if (!arg) {
       return;
     }
@@ -135,15 +134,23 @@ function main() {
     }
 
     updateCodexPinStateFromEvent(payload);
-    forwardToOriginalNotify(arg);
+    forwardToOriginalNotify(arg, options);
   } catch {
     // 任何异常都不应影响 Codex 本身
   }
 }
 
-main();
+function main() {
+  runCodexHookArg(process.argv[2]);
+}
+
+if (require.main === module) {
+  main();
+}
 
 module.exports = {
+  forwardToOriginalNotify,
+  runCodexHookArg,
   shouldForwardToOriginalNotify,
   __internal: {
     normalizePathForMatch,

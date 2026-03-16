@@ -2,9 +2,60 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { createStorage } = require('./storage');
 const { getSessionStatus } = require('./codexpinStatus');
+const { handleHookRuntime } = require('./hookRuntime');
+const { runInstallBootstrap } = require('./installBootstrap');
 const { normalizeWindowBounds } = require('./windowGeometry');
 
+if (handleHookRuntime()) {
+  process.exit(0);
+}
+
 let storage;
+let installState = {
+  installState: 'starting',
+  hookConfigured: false,
+  autoSetupAttempted: false,
+  autoSetupSucceeded: false,
+  hookCommand: null,
+  message: 'CodexPin 正在检查 Codex 接入状态。',
+};
+let ipcRegistered = false;
+
+function runAutoInstallBootstrap() {
+  installState = runInstallBootstrap({
+    executablePath: process.execPath,
+    appPath: app.getAppPath(),
+    isPackaged: app.isPackaged,
+  });
+  return installState;
+}
+
+function registerIpcHandlers(storageApi) {
+  if (ipcRegistered) {
+    return;
+  }
+
+  ipcRegistered = true;
+
+  ipcMain.handle('codexpin-load-state', async () => {
+    return storageApi.loadState();
+  });
+
+  ipcMain.handle('codexpin-save-state', async (_event, state) => {
+    await storageApi.saveState(state);
+  });
+
+  ipcMain.handle('codexpin-get-session-status', async () => {
+    return getSessionStatus({
+      hookInstalled: installState.hookConfigured,
+      notConnectedMessage: installState.message,
+    });
+  });
+
+  ipcMain.handle('codexpin-get-installation-status', async () => installState);
+
+  ipcMain.handle('codexpin-retry-installation', async () => runAutoInstallBootstrap());
+}
 
 async function createWindow(bounds) {
   const windowOptions = {
@@ -30,18 +81,7 @@ async function createWindow(bounds) {
 
   // Wire IPC handlers for state persistence and window bounds.
   const storageApi = storage || createStorage(app);
-
-  ipcMain.handle('codexpin-load-state', async () => {
-    return storageApi.loadState();
-  });
-
-  ipcMain.handle('codexpin-save-state', async (_event, state) => {
-    await storageApi.saveState(state);
-  });
-
-  ipcMain.handle('codexpin-get-session-status', async () => {
-    return getSessionStatus();
-  });
+  registerIpcHandlers(storageApi);
 
   mainWindow.on('move', async () => {
     const bounds = mainWindow.getBounds();
@@ -56,6 +96,7 @@ async function createWindow(bounds) {
 
 app.whenReady().then(async () => {
   storage = createStorage(app);
+  runAutoInstallBootstrap();
   const initialState = await storage.loadState();
   const bounds = (initialState && initialState.windowBounds) || null;
 

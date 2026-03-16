@@ -9,6 +9,7 @@
   ];
   const quotaFiveHourEl = document.getElementById('quota-five-hour');
   const quotaWeeklyEl = document.getElementById('quota-weekly');
+  const hookActionEl = document.getElementById('hook-action');
 
   // Guard: if DOM is not ready for some reason, bail early.
   if (!sessionTimeEl || !statusTextEl) return;
@@ -22,6 +23,7 @@
       ? statusFeedback.createCompletionPingPlayer()
       : async () => {};
   let previousSessionStatus = null;
+  let installationState = null;
   if (!state) {
     sessionTimeEl.textContent = '—';
     statusTextEl.textContent = '—';
@@ -77,6 +79,18 @@
     quotaWeeklyEl.textContent = weekly
       ? `Week ${weekly.remainingPercent}%`
       : 'Week --';
+  }
+
+  function renderHookAction(nextInstallationState) {
+    if (!hookActionEl) return;
+
+    if (nextInstallationState?.installState === 'setup_failed') {
+      hookActionEl.classList.remove('hook-action--hidden');
+      hookActionEl.textContent = '重试接入';
+      return;
+    }
+
+    hookActionEl.classList.add('hook-action--hidden');
   }
 
   function renderFromState() {
@@ -136,6 +150,34 @@
       });
     }
 
+    if (bridge && typeof bridge.getInstallationStatus === 'function') {
+      try {
+        installationState = await bridge.getInstallationStatus();
+      } catch {
+        installationState = null;
+      }
+    }
+
+    renderHookAction(installationState);
+
+    if (hookActionEl && bridge && typeof bridge.retryInstallation === 'function') {
+      hookActionEl.addEventListener('click', async () => {
+        hookActionEl.disabled = true;
+        hookActionEl.textContent = '接入中...';
+        try {
+          installationState = await bridge.retryInstallation();
+        } catch {
+          installationState = {
+            installState: 'setup_failed',
+            message: 'CodexPin 自动接入失败。',
+          };
+        } finally {
+          renderHookAction(installationState);
+          hookActionEl.disabled = false;
+        }
+      });
+    }
+
     async function pollCodex() {
       if (!bridge || typeof bridge.getSessionStatus !== 'function') {
         renderFromState();
@@ -158,6 +200,8 @@
           sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
           statusTextEl.textContent = info.statusText || (isIdle ? '待命中' : '工作中');
         }
+
+        renderHookAction(installationState);
 
         const root = document.getElementById('widget-root');
         if (root) {

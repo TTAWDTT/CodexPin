@@ -44,6 +44,42 @@ function testReturnsNotConnectedWithoutStatusFile() {
   assert.strictEqual(result.phase, '未接入 Codex Hook');
 }
 
+function testReturnsIdleWithoutStatusFileWhenHookIsInstalled() {
+  const rootDir = createTempRoot();
+  const result = getSessionStatus({
+    rootDir,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: 1000,
+    hookInstalled: true,
+    detectCodexProcess: () => ({
+      hasCodexProcess: true,
+    }),
+  });
+
+  assert.strictEqual(result.integrationState, 'idle');
+  assert.strictEqual(result.statusText, '待命中');
+  assert.strictEqual(result.hasSession, false);
+  assert.strictEqual(result.phase, '待命中');
+}
+
+function testShowsNoCodexProcessWhenHookInstalledButProcessMissing() {
+  const rootDir = createTempRoot();
+  const result = getSessionStatus({
+    rootDir,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: 1000,
+    hookInstalled: true,
+    detectCodexProcess: () => ({
+      hasCodexProcess: false,
+    }),
+  });
+
+  assert.strictEqual(result.integrationState, 'idle');
+  assert.strictEqual(result.statusText, '待命中');
+  assert.strictEqual(result.hasSession, false);
+  assert.strictEqual(result.phase, '暂无 Codex 进程');
+}
+
 function testReturnsIdleWhenProjectHasNoSession() {
   const rootDir = createTempRoot();
   writeStatus(rootDir, {
@@ -69,6 +105,9 @@ function testReturnsIdleWhenProjectHasNoSession() {
     rootDir,
     projectDir: 'D:\\Github\\CodexPin',
     nowMs: 3000,
+    detectCodexProcess: () => ({
+      hasCodexProcess: true,
+    }),
   });
 
   assert.strictEqual(result.integrationState, 'idle');
@@ -250,6 +289,9 @@ function testFallsBackToHookSummaryAfterTaskComplete() {
     codexRoot,
     projectDir: 'D:\\Github\\CodexPin',
     nowMs: Date.parse('2026-03-16T02:30:13.000Z'),
+    detectCodexProcess: () => ({
+      hasCodexProcess: true,
+    }),
   });
 
   assert.strictEqual(result.isActive, false);
@@ -403,6 +445,9 @@ function testExposesRateLimitsFromLiveRollout() {
     codexRoot,
     projectDir: 'D:\\Github\\CodexPin',
     nowMs: Date.parse('2026-03-16T02:30:13.000Z'),
+    detectCodexProcess: () => ({
+      hasCodexProcess: true,
+    }),
   });
 
   assert.deepStrictEqual(result.rateLimits, {
@@ -421,15 +466,57 @@ function testExposesRateLimitsFromLiveRollout() {
   });
 }
 
+function testOverridesStaleIdleSummaryWhenNoCodexProcessExists() {
+  const rootDir = createTempRoot();
+  const hookAt = Date.parse('2026-03-16T02:30:12.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: hookAt,
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt: Date.parse('2026-03-16T02:29:50.000Z'),
+        endedAt: hookAt,
+        status: 'active',
+        lastEvent: {
+          timestamp: hookAt,
+          phase: '上一轮已完成',
+          details: ['不应该继续占据当前空闲态'],
+          rawMessagePreview: 'done',
+          turnId: 't-final',
+        },
+      },
+    },
+  });
+
+  const result = getSessionStatus({
+    rootDir,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T03:30:13.000Z'),
+    detectCodexProcess: () => ({
+      hasCodexProcess: false,
+    }),
+  });
+
+  assert.strictEqual(result.isActive, false);
+  assert.strictEqual(result.statusText, '待命中');
+  assert.strictEqual(result.phase, '暂无 Codex 进程');
+}
+
 function run() {
   console.log('Running CodexPin status tests...');
   testReturnsNotConnectedWithoutStatusFile();
+  testReturnsIdleWithoutStatusFileWhenHookIsInstalled();
+  testShowsNoCodexProcessWhenHookInstalledButProcessMissing();
   testReturnsIdleWhenProjectHasNoSession();
   testMatchesWindowsPathsAndSelectsLatestSession();
   testPrefersLiveRolloutWhileSessionIsActive();
   testFallsBackToHookSummaryAfterTaskComplete();
   testKeepsWorkingWhenLatestTurnHasNotCompletedYet();
   testExposesRateLimitsFromLiveRollout();
+  testOverridesStaleIdleSummaryWhenNoCodexProcessExists();
   console.log('All CodexPin status tests passed.');
 }
 

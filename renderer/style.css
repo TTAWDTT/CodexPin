@@ -85,6 +85,30 @@ body {
   flex: 1;
 }
 
+.hook-action {
+  align-self: flex-start;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  background: rgba(15, 23, 42, 0.16);
+  color: #e2e8f0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.hook-action:hover {
+  background: rgba(30, 41, 59, 0.32);
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.hook-action--hidden {
+  display: none;
+}
+
 /* 保留状态文本样式类名占位，当前不再使用额度低提示色 */
 .widget-topbar .weekly-remaining--low {
   color: inherit;
