@@ -136,6 +136,10 @@ function parseRolloutLines(lines) {
     sessionStartedAt: 0,
     lastActivityMs: 0,
     terminalMs: 0,
+    currentTurnId: null,
+    currentTurnStartedAt: 0,
+    currentTurnCompleted: false,
+    currentTurnCompletedAt: 0,
     latestAgentMessage: null,
     latestToolCall: null,
     latestAssistantMessage: null,
@@ -158,6 +162,13 @@ function parseRolloutLines(lines) {
       }
     }
 
+    if (entry.type === 'turn_context') {
+      state.currentTurnId = payload.turn_id || payload.turnId || state.currentTurnId;
+      state.currentTurnStartedAt = timestampMs || state.currentTurnStartedAt;
+      state.currentTurnCompleted = false;
+      state.currentTurnCompletedAt = 0;
+    }
+
     if (!(entry.type === 'event_msg' && payload.type === 'token_count') && timestampMs) {
       state.lastActivityMs = Math.max(state.lastActivityMs, timestampMs);
     }
@@ -173,6 +184,11 @@ function parseRolloutLines(lines) {
 
     if (entry.type === 'event_msg' && payload.type === 'task_complete') {
       state.terminalMs = Math.max(state.terminalMs, timestampMs);
+      const completedTurnId = payload.turn_id || payload.turnId || null;
+      if (!state.currentTurnId || !completedTurnId || completedTurnId === state.currentTurnId) {
+        state.currentTurnCompleted = true;
+        state.currentTurnCompletedAt = timestampMs;
+      }
       continue;
     }
 
@@ -218,6 +234,10 @@ function parseRolloutLines(lines) {
     sourceTimestampMs: display?.sourceTimestampMs || 0,
     lastActivityMs: state.lastActivityMs,
     sessionStartedAt: state.sessionStartedAt,
+    currentTurnId: state.currentTurnId,
+    currentTurnStartedAt: state.currentTurnStartedAt,
+    currentTurnCompleted: state.currentTurnCompleted,
+    currentTurnCompletedAt: state.currentTurnCompletedAt,
     isTerminal: Boolean(state.terminalMs && state.terminalMs >= state.lastActivityMs),
     terminalMs: state.terminalMs,
   };

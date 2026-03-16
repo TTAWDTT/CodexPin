@@ -259,6 +259,80 @@ function testFallsBackToHookSummaryAfterTaskComplete() {
   assert.strictEqual(result.elapsedSeconds, 22);
 }
 
+function testKeepsWorkingWhenLatestTurnHasNotCompletedYet() {
+  const rootDir = createTempRoot();
+  const codexRoot = createTempRoot();
+  const previousTurnId = 'turn-old';
+  const currentTurnId = 'turn-current';
+  const startedAt = Date.parse('2026-03-16T02:29:50.000Z');
+  const currentTurnAt = Date.parse('2026-03-16T02:30:00.000Z');
+  const lastToolAt = Date.parse('2026-03-16T02:30:05.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: Date.parse('2026-03-16T02:29:40.000Z'),
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt,
+        endedAt: null,
+        status: 'active',
+        lastEvent: {
+          timestamp: Date.parse('2026-03-16T02:29:40.000Z'),
+          phase: '上一轮已完成',
+          details: ['不该覆盖当前进行中的 turn'],
+          rawMessagePreview: 'previous',
+          turnId: previousTurnId,
+        },
+      },
+    },
+  });
+
+  writeRollout(codexRoot, 'latest', [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:29:50.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'latest',
+        timestamp: '2026-03-16T02:29:50.000Z',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'turn_context',
+      payload: {
+        turn_id: currentTurnId,
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:05.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        name: 'shell_command',
+        input: '{"command":"Get-Content electron/codexpinStatus.js -TotalCount 80"}',
+      },
+    }),
+  ]);
+
+  const result = getSessionStatus({
+    rootDir,
+    codexRoot,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T02:30:45.000Z'),
+  });
+
+  assert.strictEqual(result.isActive, true);
+  assert.strictEqual(result.statusText, '工作中');
+  assert.strictEqual(result.phase, '调用工具 shell_command');
+  assert.deepStrictEqual(result.details, ['Get-Content electron/codexpinStatus.js -TotalCount 80']);
+  assert.strictEqual(result.elapsedSeconds, 45);
+}
+
 function run() {
   console.log('Running CodexPin status tests...');
   testReturnsNotConnectedWithoutStatusFile();
@@ -266,6 +340,7 @@ function run() {
   testMatchesWindowsPathsAndSelectsLatestSession();
   testPrefersLiveRolloutWhileSessionIsActive();
   testFallsBackToHookSummaryAfterTaskComplete();
+  testKeepsWorkingWhenLatestTurnHasNotCompletedYet();
   console.log('All CodexPin status tests passed.');
 }
 

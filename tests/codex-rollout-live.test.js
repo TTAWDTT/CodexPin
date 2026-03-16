@@ -77,6 +77,34 @@ function testParseRolloutLinesFallsBackToToolCall() {
   assert.strictEqual(result.sourceType, 'tool_call');
 }
 
+function testParseRolloutLinesTracksOpenTurn() {
+  const lines = [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'turn_context',
+      payload: {
+        turn_id: 'turn-1',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:04.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        name: 'shell_command',
+        input: '{"command":"bun test"}',
+      },
+    }),
+  ];
+
+  const result = parseRolloutLines(lines);
+
+  assert.strictEqual(result.currentTurnId, 'turn-1');
+  assert.strictEqual(result.currentTurnCompleted, false);
+  assert.strictEqual(result.currentTurnStartedAt, Date.parse('2026-03-16T02:30:00.000Z'));
+}
+
 function testFindLatestRolloutFileForSession() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-'));
   const sessionsRoot = path.join(base, 'sessions');
@@ -108,9 +136,9 @@ function run() {
   testSummarizeToolInput();
   testParseRolloutLinesPrefersAgentMessage();
   testParseRolloutLinesFallsBackToToolCall();
+  testParseRolloutLinesTracksOpenTurn();
   testFindLatestRolloutFileForSession();
   console.log('All Codex rollout live tests passed.');
 }
 
 run();
-

@@ -5,6 +5,7 @@ const path = require('path');
 const { getLiveRolloutStatus } = require('./codexRolloutLive');
 
 const ACTIVE_WINDOW_MS = 15 * 1000;
+const OPEN_TURN_STALE_MS = 30 * 60 * 1000;
 
 function normalizePathForMatch(input) {
   if (!input || typeof input !== 'string') return '';
@@ -92,8 +93,8 @@ function buildDisplayFromHookEvent(lastEvent) {
   };
 }
 
-function pickDisplayState({ hookDisplay, liveDisplay, liveIsActive }) {
-  if (liveIsActive && liveDisplay && liveDisplay.phase) {
+function pickDisplayState({ hookDisplay, liveDisplay, liveTurnAheadOfHook, liveIsActive }) {
+  if ((liveTurnAheadOfHook || liveIsActive) && liveDisplay && liveDisplay.phase) {
     return liveDisplay;
   }
 
@@ -138,20 +139,35 @@ function getSessionStatus(options = {}) {
   });
 
   const hookDisplay = buildDisplayFromHookEvent(session.lastEvent);
+  const hookTurnId = session?.lastEvent?.turnId || null;
+  const liveTurnAheadOfHook = Boolean(
+    liveStatus?.currentTurnId && liveStatus.currentTurnId !== hookTurnId,
+  );
+  const liveOpenTurn = Boolean(
+    liveTurnAheadOfHook &&
+      liveStatus?.currentTurnCompleted === false &&
+      nowMs - (liveStatus.lastActivityMs || liveStatus.currentTurnStartedAt || 0) <= OPEN_TURN_STALE_MS,
+  );
   const liveIsActive = Boolean(
-    liveStatus &&
-      liveStatus.lastActivityMs &&
-      !liveStatus.isTerminal &&
-      nowMs - liveStatus.lastActivityMs <= ACTIVE_WINDOW_MS,
+    liveOpenTurn ||
+      (liveStatus &&
+        liveStatus.lastActivityMs &&
+        !liveStatus.isTerminal &&
+        nowMs - liveStatus.lastActivityMs <= ACTIVE_WINDOW_MS),
   );
   const display = pickDisplayState({
     hookDisplay,
     liveDisplay: liveStatus,
+    liveTurnAheadOfHook,
     liveIsActive,
   });
 
   const startedAt =
-    liveStatus?.sessionStartedAt || session.startedAt || lastEventTimestamp || nowMs;
+    liveStatus?.currentTurnStartedAt ||
+    liveStatus?.sessionStartedAt ||
+    session.startedAt ||
+    lastEventTimestamp ||
+    nowMs;
   const terminalTimestamp =
     session.endedAt ||
     liveStatus?.terminalMs ||
@@ -189,5 +205,6 @@ module.exports = {
     loadStatusIndex,
     findLatestSessionForDirectory,
     ACTIVE_WINDOW_MS,
+    OPEN_TURN_STALE_MS,
   },
 };
