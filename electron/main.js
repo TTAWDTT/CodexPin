@@ -2,13 +2,12 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { createStorage } = require('./storage');
 const { getSessionStatus } = require('./codexpinStatus');
+const { normalizeWindowBounds } = require('./windowGeometry');
 
 let storage;
 
 async function createWindow(bounds) {
   const windowOptions = {
-    width: 360,
-    height: 220,
     resizable: false,
     frame: false,
     transparent: true,
@@ -20,9 +19,7 @@ async function createWindow(bounds) {
     },
   };
 
-  if (bounds && typeof bounds === 'object') {
-    Object.assign(windowOptions, bounds);
-  }
+  Object.assign(windowOptions, normalizeWindowBounds(bounds));
 
   const mainWindow = new BrowserWindow(windowOptions);
 

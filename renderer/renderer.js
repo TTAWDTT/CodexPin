@@ -13,7 +13,13 @@
 
   // CodexPinState is attached as a global in state.js
   const state = window.CodexPinState || window.CodexPinStateFactory?.();
+  const statusFeedback = window.CodexPinStatusFeedback || {};
   const bridge = window.codexpin;
+  const playCompletionPing =
+    typeof statusFeedback.createCompletionPingPlayer === 'function'
+      ? statusFeedback.createCompletionPingPlayer()
+      : async () => {};
+  let previousSessionStatus = null;
   if (!state) {
     sessionTimeEl.textContent = '—';
     statusTextEl.textContent = '—';
@@ -142,10 +148,23 @@
           root.dataset.mode = state.getState().mode || 'full';
         }
 
+        if (
+          typeof statusFeedback.shouldPlayCompletionPing === 'function' &&
+          statusFeedback.shouldPlayCompletionPing(previousSessionStatus, info)
+        ) {
+          void playCompletionPing();
+        }
+
         renderStatusLines(
           [info.phase, ...(Array.isArray(info.details) ? info.details : [])],
           { active: Boolean(info.isActive) },
         );
+
+        previousSessionStatus = {
+          integrationState: info.integrationState,
+          isActive: Boolean(info.isActive),
+          sessionId: info.sessionId || null,
+        };
       } catch {
         renderFromState();
       }
