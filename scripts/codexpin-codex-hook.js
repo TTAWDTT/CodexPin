@@ -19,14 +19,86 @@ const {
   updateCodexPinStateFromEvent,
 } = require('./codexpinHookLib');
 
-function forwardToOriginalNotify(rawJsonArg) {
-  try {
-    const home = os.homedir();
-    const originalPath = path.join(home, '.codexpin', 'original-notify.json');
-    if (!fs.existsSync(originalPath)) return;
+function normalizePathForMatch(input) {
+  if (!input || typeof input !== 'string') return '';
 
-    const raw = fs.readFileSync(originalPath, 'utf8');
-    const original = JSON.parse(raw);
+  let normalized = input.trim().replace(/\//g, '\\');
+  if (normalized.startsWith('\\\\?\\')) {
+    normalized = normalized.slice(4);
+  }
+  return normalized.toLowerCase();
+}
+
+function readJsonArray(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readConfirmoOriginalNotify(homeDir) {
+  const confirmoOriginalPath = path.join(
+    homeDir,
+    '.confirmo',
+    'hooks',
+    'codex-original-notify.json',
+  );
+  if (!fs.existsSync(confirmoOriginalPath)) return null;
+
+  try {
+    const raw = fs.readFileSync(confirmoOriginalPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.notify) ? parsed.notify : null;
+  } catch {
+    return null;
+  }
+}
+
+function commandReferencesHook(commandArray, hookPath) {
+  if (!Array.isArray(commandArray) || !hookPath) return false;
+
+  const target = normalizePathForMatch(hookPath);
+  return commandArray.some((part) => normalizePathForMatch(part) === target);
+}
+
+function shouldForwardToOriginalNotify(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const currentHookPath = options.currentHookPath || __filename;
+  const originalPath = path.join(homeDir, '.codexpin', 'original-notify.json');
+  const originalNotify = readJsonArray(originalPath);
+
+  if (!Array.isArray(originalNotify) || originalNotify.length === 0) {
+    return false;
+  }
+
+  if (commandReferencesHook(originalNotify, currentHookPath)) {
+    return false;
+  }
+
+  const confirmoHookPath = path.join(homeDir, '.confirmo', 'hooks', 'confirmo-codex-hook.js');
+  if (commandReferencesHook(originalNotify, confirmoHookPath)) {
+    const confirmoOriginalNotify = readConfirmoOriginalNotify(homeDir);
+    if (commandReferencesHook(confirmoOriginalNotify, currentHookPath)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function forwardToOriginalNotify(rawJsonArg, options = {}) {
+  try {
+    const home = options.homeDir || os.homedir();
+    const currentHookPath = options.currentHookPath || __filename;
+    const originalPath = path.join(home, '.codexpin', 'original-notify.json');
+    if (!shouldForwardToOriginalNotify({ homeDir: home, currentHookPath })) return;
+
+    const original = readJsonArray(originalPath);
     if (!Array.isArray(original) || original.length === 0) return;
 
     const cmd = original[0];
@@ -71,3 +143,12 @@ function main() {
 
 main();
 
+module.exports = {
+  shouldForwardToOriginalNotify,
+  __internal: {
+    normalizePathForMatch,
+    commandReferencesHook,
+    readJsonArray,
+    readConfirmoOriginalNotify,
+  },
+};

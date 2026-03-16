@@ -7,6 +7,9 @@ const {
   summarizeAssistantMessage,
   updateCodexPinStateFromEvent,
 } = require('../scripts/codexpinHookLib');
+const {
+  shouldForwardToOriginalNotify,
+} = require('../scripts/codexpin-codex-hook');
 
 function createTempRoot() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-hook-test-'));
@@ -158,12 +161,75 @@ function testUpdateCodexPinStateFromEvent() {
   );
 }
 
+function testSkipsForwardWhenOriginalNotifyPointsBackToCodexPinThroughConfirmo() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-hook-loop-'));
+  const homeDir = path.join(base, 'home');
+  const codexpinDir = path.join(homeDir, '.codexpin');
+  const confirmoHooksDir = path.join(homeDir, '.confirmo', 'hooks');
+  fs.mkdirSync(codexpinDir, { recursive: true });
+  fs.mkdirSync(confirmoHooksDir, { recursive: true });
+
+  const codexpinHookPath = path.join(base, 'repo', 'scripts', 'codexpin-codex-hook.js');
+  const confirmoHookPath = path.join(homeDir, '.confirmo', 'hooks', 'confirmo-codex-hook.js');
+
+  fs.writeFileSync(
+    path.join(codexpinDir, 'original-notify.json'),
+    JSON.stringify(['C:\\Users\\86153\\.bun\\bin\\bun.exe', confirmoHookPath]),
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(confirmoHooksDir, 'codex-original-notify.json'),
+    JSON.stringify({
+      notify: ['C:\\Program Files\\nodejs\\node.exe', codexpinHookPath],
+    }),
+    'utf8',
+  );
+
+  const shouldForward = shouldForwardToOriginalNotify({
+    homeDir,
+    currentHookPath: codexpinHookPath,
+  });
+
+  assert.strictEqual(
+    shouldForward,
+    false,
+    '当 Confirmo 的原始 notify 又指回 CodexPin 时，应阻止转发形成循环',
+  );
+}
+
+function testAllowsForwardWhenOriginalNotifyDoesNotLoopBack() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-hook-forward-'));
+  const homeDir = path.join(base, 'home');
+  const codexpinDir = path.join(homeDir, '.codexpin');
+  fs.mkdirSync(codexpinDir, { recursive: true });
+
+  const codexpinHookPath = path.join(base, 'repo', 'scripts', 'codexpin-codex-hook.js');
+  fs.writeFileSync(
+    path.join(codexpinDir, 'original-notify.json'),
+    JSON.stringify(['C:\\Windows\\System32\\cmd.exe', '/c', 'echo', 'ok']),
+    'utf8',
+  );
+
+  const shouldForward = shouldForwardToOriginalNotify({
+    homeDir,
+    currentHookPath: codexpinHookPath,
+  });
+
+  assert.strictEqual(
+    shouldForward,
+    true,
+    '普通的原始 notify 不应被误判为循环',
+  );
+}
+
 function run() {
   console.log('Running Codex hook tests...');
   testSummarizeAssistantMessage();
   testSummarizeMarkdownBoldAndLongDetail();
   testSummarizeSingleLineMessage();
   testUpdateCodexPinStateFromEvent();
+  testSkipsForwardWhenOriginalNotifyPointsBackToCodexPinThroughConfirmo();
+  testAllowsForwardWhenOriginalNotifyDoesNotLoopBack();
   console.log('All Codex hook tests passed.');
 }
 
