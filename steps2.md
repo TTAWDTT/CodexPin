@@ -58,7 +58,7 @@
   - 回退测试：删除 `~/.codexpin/codex-status/`，确认仍能从 `.codex` 日志渲染基本信息。  
   验收指标：在 `docs/tests-checklist.md` 中新增一节“Codex hook 模式测试”，列出上述检查项，并在实际实现后可以逐条打钩验证。
 
-- [ ] 任务 9：文档与用户引导设计  
+- [x] 任务 9：文档与用户引导设计  
   要求：更新或新增文档（例如 `README.md` 和 `docs/solution.md`），用面向用户/开发者两种视角说明：  
   - 用户视角：  
     - 安装 CodexPin 的步骤；  

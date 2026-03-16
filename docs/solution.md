@@ -1,280 +1,172 @@
-# CodexPin 核心小部件实施方案（Solution）
+# CodexPin 实施方案（当前版本）
 
-## 1. 背景与目标
+## 1. 产品目标
 
-CodexPin 旨在为 Codex 使用过程提供一个「始终置顶的轻量级进度小部件」，让用户在切换到其他窗口工作时，仍然能够一眼看到当前 Codex 会话的状态与本周使用预算。
+CodexPin 是一个始终置顶的小部件，用来把 Codex 在“当前项目”的最近一轮状态显示在屏幕上。
 
-本实施方案面向未来参与开发或维护的工程师，假设读者：
-- 对本仓库没有任何上下文
-- 熟悉常见桌面应用技术栈（例如 Electron/Tauri/WPF 等）
-- 对「计时器 + 状态面板」类产品有基础认知
+当前版本已经不再尝试展示订阅额度，也不再从 `.codex` 日志中推断内容。正式数据链路只有：
 
-本方案重点解决：
-1. 如何抽象 Codex 会话与周度预算的核心数据模型
-2. 如何组织状态管理与持久化
-3. 如何落地一个始终置顶、黑色磨砂玻璃风格的小面板 UI
-4. 如何分阶段实施与迭代
+`Codex notify -> CodexPin hook -> ~/.codexpin/codex-status/status.json -> Electron widget`
 
-> 备注：本方案不强制绑定具体技术栈，更多从「架构与模块职责」出发设计。选定具体技术栈后，可以在此基础上细化到代码结构。
+这保证了面板看到的内容与我们自己定义的状态模型一致。
 
----
+## 2. 当前展示内容
 
-## 2. 产品定位与核心体验
+小部件分成三块：
 
-### 2.1 产品定位
+- 左上：本轮 Codex 会话持续时间
+- 右上：本地状态
+  - `未接入`
+  - `待命中`
+  - `工作中`
+- 中间：最近一轮回答中提炼出的单个状态段
+  - 第一行 `phase`
+  - 后两行 `details`
 
-CodexPin 并不是一个通用计时器，而是一个「Codex 工作会话伴侣」：
-- 以「一次 Codex 深度协作」作为基本单位来计时
-- 以「每周 5 小时预算」作为资源约束，帮助用户有节制地高效使用 Codex
-- 以「简洁叙述的 3–4 行文字」呈现当前工作流程
+只有最近一段会被显示，不展示整段长日志。
 
-### 2.2 目标场景
+## 3. 接入方式
 
-典型使用场景：
-- 用户在 Codex 中开启一个任务，开始长时间的配对编程 / 方案设计
-- 中途需要切到 IDE / 浏览器 / 其他文档，但仍希望随时知道：
-  - 当前这轮会话已经工作了多久
-  - 本周 Codex 使用时间还剩多少
-  - 现在大致处于哪一个阶段（思考 / 写代码 / 测试 / 等待反馈等）
+### 3.1 Hook 接入
 
-### 2.3 关键体验原则
+CodexPin 使用官方 `notify` 机制接入 Codex。
 
-1. **始终辅助，不打扰**：信息密度高、更新频率稳定，不闪烁、不刷屏。
-2. **以会话为单位的时间观**：关注「这轮配对编码进行到哪了」，而不是裸计时。
-3. **预算感清晰**：周度 5 小时预算随时可视，避免「用完才发现」。
-4. **文字优雅，结构清晰**：用霞鹜文楷 + 黑色磨砂玻璃营造安静沉稳的氛围，但信息层级绝对清楚。
+仓库内提供：
 
----
+- `scripts/codexpin-cli.js`
+  - `setup`
+  - `uninstall`
+- `scripts/codexpin-codex-hook.js`
+  - 真正被 Codex `notify` 调用的 hook 入口
 
-## 3. 系统架构概览
+推荐命令：
 
-整体结构分为三层：
+```bash
+npm run setup:hook
+```
 
-1. **模型层（Domain Model）**  
-   抽象 Codex 会话与周度预算：
-   - `Session`：一次连续 Codex 工作会话
-   - `WeeklyBudget`：周度总预算、已用时长与剩余额度
+它会把 `~/.codex/config.toml` 中的 `notify` 设置为 CodexPin hook。
 
-2. **状态与持久化层（State + Persistence）**  
-   集中管理运行时状态与本地存储：
-   - `Store`：统一的状态管理对象
-   - `Persistence`：负责读写本地配置/状态文件
+如果用户原本已经有 `notify`：
 
-3. **UI 层（Always-On-Top Widget）**  
-   显示数据并与用户交互：
-   - 顶栏：左侧会话时间，右侧周度剩余额度
-   - 主区：3–4 行工作流程叙述
-   - 行为：始终置顶、可拖拽、可记忆位置
+- 原值会保存到 `~/.codexpin/original-notify.json`
+- CodexPin hook 在写完自己的状态后会继续转发给原有 `notify`
 
-> 建议：无论技术栈如何，优先保证这三层的职责边界清晰，以便后续迁移/重构。
+卸载时：
 
----
+```bash
+npm run uninstall:hook
+```
 
-## 4. 核心数据模型设计
+会恢复之前的 `notify`，或移除当前 CodexPin 的 `notify`。
 
-### 4.1 会话模型 `Session`
+### 3.2 状态文件
 
-字段建议：
-- `id: string`：会话唯一标识（例如 UUID）
-- `startTime: Date`：会话开始时间
-- `endTime?: Date`：会话结束时间（进行中时为空）
-- `status: "idle" | "active" | "completed"`：
-  - `idle`：待命状态（不计时）
-  - `active`：正在与 Codex 深度协作
-  - `completed`：会话已结束
-- `elapsedSeconds: number`：当前会话累计时长（秒）
-- `phase: "thinking" | "coding" | "testing" | "waiting" | "other"`：当前阶段
-- `title?: string`：会话标题（可选，例如当前任务名）
-- `notes?: string[]`：会话中的备注或关键事件
+CodexPin 的正式状态目录：
 
-### 4.2 周度预算模型 `WeeklyBudget`
+```text
+~/.codexpin/
+  original-notify.json
+  codex-status/
+    status.json
+    sessions/
+      <sessionId>.json
+```
 
-字段建议：
-- `weekStartDate: string`：当前统计周的起始日期（ISO 字符串）
-- `weeklyLimitMinutes: number`：周预算总分钟数（默认 300 = 5h）
-- `weeklyUsedMinutes: number`：本周已使用分钟数
-- `remainingMinutes: number`：剩余分钟数（`weeklyLimitMinutes - weeklyUsedMinutes`）
+其中：
 
-逻辑约束：
-- 如果当前时间不在 `weekStartDate` 对应的周内，则重置：
-  - `weekStartDate = 当前周一日期`
-  - `weeklyUsedMinutes = 0`
-
-### 4.3 状态文本队列 `StatusLines`
+- `status.json`
+  供 Electron 主进程快速读取最近 session 摘要
+- `sessions/<sessionId>.json`
+  保存更完整的 turn 历史
 
-结构：
-- `statusLines: string[]`：最多 4 条
-  - 第一行：当前阶段/任务标题
-  - 后续行：最近操作、备注或下一步计划
+## 4. 文本提炼规则
 
-规则：
-- 新增状态时，将新文本 push 到末尾，超过 4 条则移除最旧一条
-- 状态更新 API：
-  - `updateStatusLines(lines: string[])`
-  - `appendStatusLine(line: string)`
+hook 接收到 `last-assistant-message` 后，会做如下提炼：
 
----
+1. 按行切分
+2. 去空行
+3. 清洗 Markdown 包裹
+   - 标题
+   - 列表
+   - 编号
+   - 粗体
+4. 第一行作为 `phase`
+5. 后续最多两行作为 `details`
+6. 每条 `detail` 截断到适合小面板阅读的长度
 
-## 5. 状态管理与持久化设计
+目标不是完整复刻回答，而是让用户一眼看到“这一轮现在在说什么”。
 
-### 5.1 Store 接口
+## 5. Electron 端数据流
 
-定义一个统一的状态管理对象（伪接口示意）：
+Electron 端分工如下：
 
-- 会话控制：
-  - `startSession(title?: string): void`
-  - `stopSession(): void`
-  - `setIdle(isIdle: boolean): void`
-  - `setPhase(phase: Session["phase"]): void`
+- 主进程
+  - 通过 `codexpin-get-session-status` IPC 读取 `~/.codexpin/codex-status/status.json`
+  - 按当前项目路径筛选最近一条 session
+- 渲染进程
+  - 每 1.5 秒轮询一次 IPC
+  - 把返回值映射成顶部时间、右上状态和中间段落
 
-- 状态文本：
-  - `updateStatusLines(lines: string[]): void`
-  - `appendStatusLine(line: string): void`
+当前正式运行态只依赖 `~/.codexpin`，不再读取 `.codex`。
 
-- 周度预算：
-  - `getWeeklyBudget(): WeeklyBudget`
-  - `resetWeeklyBudget(): void`
+## 6. 三种状态
 
-- 订阅机制（供 UI 使用）：
-  - `subscribe(listener: (state) => void): () => void`
+### 6.1 未接入
 
-### 5.2 定时刷新机制
+当 `~/.codexpin/codex-status/status.json` 不存在时：
 
-- 启动应用时：
-  - 初始化 Store，从持久化存储加载历史状态
-  - 创建一个定时器（例如每 1s 或 5s），在 `status === "active"` 时更新：
-    - 当前会话 `elapsedSeconds`
-    - UI 中显示的会话时间
-- 当 `status === "idle"` 时：
-  - 不累加会话时间
-  - UI 左上角显示为 `0` / `待命`
+- 右上显示 `未接入`
+- 主标题显示 `未接入 Codex Hook`
+- 细节提示用户先运行 `setup`
 
-### 5.3 持久化策略
+### 6.2 待命中
 
-- 文件位置：例如 `~/.codexpin/state.json` 或项目内配置目录（视技术栈而定）
-- 存储内容：
-  - `WeeklyBudget` 当前值
-  - 最近一次 `Session` 的概要信息（可选）
-  - 小部件窗口位置（x, y）和模式（完整/极简）
-- 启动时：
-  - 读取文件，如果不存在则初始化默认值
-  - 校验 `weekStartDate` 是否在当前周，不在则重置
+当 `status.json` 已存在，但当前项目没有匹配 session 时：
 
----
+- 右上显示 `待命中`
+- 主标题显示 `待命中`
 
-## 6. UI 与交互设计
+### 6.3 工作中
 
-### 6.1 布局结构
+当当前项目有最新 session 且最新事件仍在活跃窗口内时：
 
-窗口整体为一个无边框、圆角矩形的「黑色磨砂玻璃」面板，分为两部分：
+- 右上显示 `工作中`
+- 中间显示最新 `phase + details`
+- 第一行小圆点会 pulsing
 
-1. 顶部信息行（Top Bar）：
-   - 左侧：当前会话时间  
-     - `00:42`、`12:05` 等格式，`idle` 时显示 `0` 或 `待命`
-   - 右侧：本周剩余额度  
-     - `剩余 3h15m`、`剩余 0h45m`
+## 7. 测试与验证
 
-2. 主体状态区（Status Area）：
-   - 显示 3–4 行状态文字：
-     - 第 1 行：当前阶段 + 简短描述（字号略大）
-     - 第 2–4 行：最近操作、下一步计划等（字号略小、浅灰）
+当前已覆盖的验证包括：
 
-### 6.2 视觉风格
+- `tests/hook.test.js`
+  - 文本分段与状态写入
+- `tests/notify-setup.test.js`
+  - `notify` setup / uninstall 幂等性与回滚
+- `tests/codexpin-status.test.js`
+  - 只从 `~/.codexpin` 读取状态，不回退 `.codex`
+- `tests/codexpin-cli.test.js`
+  - CLI setup / uninstall 可用
 
-- 背景：
-  - 深色半透明（如 `rgba(0,0,0,0.6)`）+ 模糊效果
-  - 或使用带噪点纹理的半透明背景模拟磨砂玻璃
-- 字体：
-  - 全局使用「霞鹜文楷」作为主字体
-  - 提供备选字体（如 `Microsoft YaHei`, `sans-serif`）
-- 颜色层级：
-  - 顶栏时间和剩余额度：纯白或接近纯白
-  - 状态文本：浅灰，分主次信息适度调整饱和度/亮度
+完整清单见：
 
-### 6.3 窗口行为
+- `docs/tests-checklist.md`
 
-- 始终置顶（Always on top）
-- 无系统边框，可拖拽移动
-- 记住上次位置，避免重启后遮挡重要区域
-- 可选交互：
-  - 双击顶栏：在「完整模式」与「极简模式（只显示时间+额度）」之间切换
-  - 右键菜单：退出、重置本周统计、切换语言/主题等
+## 8. 用户完成路径
 
----
+一个新用户应能按下面流程独立完成接入：
 
-## 7. 实施步骤（迭代路线）
+1. `npm install`
+2. `npm run setup:hook`
+3. `npm start`
+4. 在当前项目里完成一轮新的 Codex 对话
+5. 看到小部件显示该轮最新的 `phase + details`
 
-以下为建议的迭代实施顺序，每一步尽量保持在可独立验证的小粒度。
+## 9. 后续扩展方向
 
-### 阶段 1：基础骨架
+后续如果继续做产品化，建议优先往这几个方向扩展：
 
-1. 选择并搭建桌面应用基础骨架（例如 Electron/Tauri/WPF 任一）  
-2. 创建一个始终置顶的小窗，渲染静态文本「CodexPin」  
-3. 验证窗口可以拖动、始终浮在其他窗口之上
-
-### 阶段 2：核心业务逻辑（会话 + 周度预算）
-
-4. 实现 `Session` 与 `WeeklyBudget` 数据结构  
-5. 编写 Store：
-   - `startSession` / `stopSession` / `setIdle` / `setPhase`
-   - `getWeeklyBudget` / `resetWeeklyBudget`
-6. 实现定时器逻辑：
-   - 在会话 `active` 时按秒数累加 `elapsedSeconds`
-   - 在 `idle` 时保持不变
-7. 将逻辑以最简单 UI 文本展现：
-   - 左侧显示当前会话时间（纯文本）
-   - 右侧显示 `remainingMinutes`
-
-### 阶段 3：状态叙述视图
-
-8. 实现 `statusLines` 队列及相关 API  
-9. 在 UI 中以 3–4 行形式展示 `statusLines`  
-10. 暂时提供简单的状态更新方式（例如：临时调试按钮、配置文件、快捷命令等）
-
-### 阶段 4：视觉与交互打磨
-
-11. 引入霞鹜文楷字体文件并在 UI 中指定为主字体  
-12. 改造 UI 为黑色磨砂玻璃风格，加入圆角与阴影  
-13. 调整字号、颜色与行距，使顶栏与内容区层级清晰  
-14. 实现窗口位置记忆与「完整/极简」模式切换
-
-### 阶段 5：增强与后续可能迭代
-
-15. 低额度提醒：当剩余额度 < 1 小时时，改变文字颜色或添加轻微动画  
-16. 会话标题与阶段标记：
-    - 支持为每次会话设置标题
-    - 通过简单选择切换 `phase`（思考/编码/测试/等待等）
-17. 自动化集成（可选、进阶）：
-    - 将来可以考虑根据 Codex 输出或命令执行自动更新 `phase` 或状态行  
-
----
-
-## 8. 测试与验证建议
-
-为保证核心功能可靠，建议至少覆盖以下测试场景（手动或自动均可）：
-
-1. **会话计时正确性**：
-   - 启动会话若干秒后停止，确认显示时间与预期一致
-   - 切换 `idle` 后，时间保持不变
-2. **周度预算累积**：
-   - 连续开启多次会话，确认 `weeklyUsedMinutes` 累加正确
-   - 模拟跨周情况，确认周度统计自动重置
-3. **状态文本展示**：
-   - 连续追加多条状态，确认最多只显示最近 4 条
-4. **持久化与恢复**：
-   - 重启应用后，确认周度统计与窗口位置能够被正确恢复
-5. **UI 行为**：
-   - 在不同应用前后切换，确认小部件始终置顶
-   - 拖动窗口、重启后位置保持不变
-
----
-
-## 9. 总结
-
-本实施方案将 CodexPin 视为「Codex 深度协作的会话伴侣」，围绕「会话时间 + 周度预算 + 工作流程叙述」三个核心维度设计数据模型与 UI，而不绑定具体技术实现。
-
-后续在选定技术栈（Electron/Tauri/WPF 等）后，可以基于本方案：
-- 映射出具体的项目目录结构与模块拆分
-- 编写更细致的实现计划（配合 `writing-plans` 技能，生成逐步执行的 Implementation Plan）
-- 使用 TDD 驱动业务逻辑部分的实现，确保计时与预算计算的正确性
-
+- 安装包内置 hook 注册，而不是要求用户从源码目录执行 setup
+- 更丰富的状态事件，而不只依赖 `agent-turn-complete`
+- 更细的 session 生命周期管理
+- 更强的多项目切换与路径匹配策略

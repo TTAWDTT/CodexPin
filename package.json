@@ -5,7 +5,9 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/state.test.js && node tests/hook.test.js && node tests/notify-setup.test.js && node tests/codexpin-status.test.js",
+    "test": "node tests/state.test.js && node tests/hook.test.js && node tests/notify-setup.test.js && node tests/codexpin-status.test.js && node tests/codexpin-cli.test.js",
+    "setup:hook": "node scripts/codexpin-cli.js setup",
+    "uninstall:hook": "node scripts/codexpin-cli.js uninstall",
     "lint": "echo \"No linter configured\"",
     "build": "electron-builder"
   },
