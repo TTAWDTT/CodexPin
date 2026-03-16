@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <strong>English</strong> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Electron-31.7.7-1f2937?style=flat-square&logo=electron&logoColor=9feaf9&labelColor=0f172a" alt="Electron" />
   <img src="https://img.shields.io/badge/Windows-Desktop-1d4ed8?style=flat-square&logo=windows11&logoColor=ffffff&labelColor=0f172a" alt="Windows" />
   <img src="https://img.shields.io/badge/Codex-Hook-f59e0b?style=flat-square&labelColor=0f172a" alt="Codex Hook" />
@@ -14,120 +18,80 @@
 </p>
 
 <p align="center">
-  CodexPin 是一个始终置顶的 Electron 小部件，用来在你切到别的窗口工作时，继续显示 Codex 当前项目的最近一轮状态。
+  CodexPin is a lightweight always-on-top desktop widget for Codex. It keeps the current task visible while you work in other windows.
 </p>
 
-## 一眼看懂
+## Overview
 
-- 自动接入本机 Codex `notify` hook
-- 用悬浮窗持续显示最近一轮 `phase + details`
-- 当前没有 Codex 进程时，明确显示 `暂无 Codex 进程`
-- 数据链路本地优先，不依赖外部服务
-- 安装包支持自定义安装目录与桌面快捷方式
+CodexPin is built for local Codex workflows on Windows. The packaged app auto-configures a Codex `notify` hook on first launch, listens for local hook events, and reads Codex rollout logs to show the newest live segment from the current session.
 
-现在的推荐使用方式是：
+Key points:
 
-1. 下载并安装打包后的 `CodexPin Setup.exe`
-2. 首次打开 `CodexPin.exe`
-3. CodexPin 自动检查并接入本机 Codex
-4. 之后正常使用 Codex，悬浮窗会自动显示状态
+- Packaged app auto-installs and chains the Codex `notify` hook
+- Floating widget stays on top and can be dragged around
+- Center panel shows only the latest live segment instead of dumping full logs
+- Local 5h and weekly remaining percentages are shown when Codex exposes them locally
+- Plays a short completion ping when a working session returns to idle
+- Local-first architecture with no Confirmo dependency
 
-安装器现在支持：
+## What The Widget Shows
 
-- 显示 CodexPin 自定义 logo
-- 安装时手动选择安装目录
+- Top-left: elapsed time for the current Codex turn
+- Top-right: current state
+  - `Not Connected`
+  - `Idle`
+  - `Working`
+- Center: the latest live segment
+  - one `phase`
+  - up to two short `details`
+- Bottom-left / bottom-right: best-effort local rate-limit percentages
+  - `5h xx%`
+  - `Week xx%`
+- Fallback state when Codex is not running:
+  - `No Codex process`
 
-正式数据链路仍然是：
+Double-clicking the top bar toggles compact mode.
+
+## Install And Use
+
+Recommended path for most users:
+
+1. Download and install `CodexPin Setup.exe`
+2. Choose an install directory if you do not want the default one
+3. Launch `CodexPin`
+4. Let CodexPin auto-configure the local Codex hook
+5. Start or resume a Codex session and watch the floating widget update itself
+
+If auto-setup fails:
+
+- the widget shows `Not Connected`
+- the center area shows the failure message
+- a `Retry Setup` button appears inside the panel
+
+If CodexPin is connected but no Codex process is currently running:
+
+- top-right stays in `Idle`
+- center shows `No Codex process`
+
+## How It Works
+
+Primary flow:
 
 `Codex notify -> CodexPin hook -> ~/.codexpin/codex-status/status.json -> Electron widget`
 
-不会再从 `.codex` 日志里“猜”当前内容。
+Live refinement:
 
-## 当前能力
+`~/.codex/sessions/.../rollout-<session>.jsonl -> live segment parser -> current phase/details + rate limits`
 
-- 左上角显示当前 Codex 会话的持续时间
-- 右上角显示本地状态：
-  - `未接入`
-  - `待命中`
-  - `工作中`
-- 当本机当前没有 Codex 进程时，中间区域显示 `暂无 Codex 进程`
-- 中间区域只显示最近一轮的一个状态段：
-  - `phase`
-  - 1–2 条 `details`
-- 打包后的 `CodexPin.exe` 自己兼任官方 `notify` hook
-- 保留已有 `notify`，通过 `~/.codexpin/original-notify.json` 做安全串联与回滚
+Notes:
 
-## 普通用户使用
+- Packaged mode follows the latest local Codex session globally
+- Source mode is mainly for development and stays scoped to the current working directory
+- Existing Codex `notify` commands are preserved and chained through `~/.codexpin/original-notify.json`
 
-如果你是从 GitHub Releases 下载的安装包，正常流程是：
+## Local Storage
 
-1. 安装 `CodexPin Setup.exe`
-2. 打开 `CodexPin`
-3. 等待它自动完成 Codex 接入
-4. 开始使用 Codex
-
-如果当前没有 Codex 在运行，小部件会显示：
-
-- 右上角：`待命中`
-- 中间：`暂无 Codex 进程`
-
-如果自动接入失败：
-
-- 右上角会显示 `未接入`
-- 中间会显示失败原因
-- 面板中会出现 `重试接入` 按钮
-
-## 开发运行（源码）
-
-```bash
-npm install
-npm start
-```
-
-其中：
-
-- `npm start`
-  启动 Electron 小部件，并自动尝试把当前 Electron 入口接到 Codex `notify`
-
-如果你仍然想手动注册源码版 hook，也可以继续用：
-
-```bash
-npm run setup:hook
-```
-
-如果你想移除 hook：
-
-```bash
-npm run uninstall:hook
-```
-
-## 如何确认已经接入成功
-
-1. 启动 CodexPin
-2. 等待它自动完成接入
-3. 在当前项目目录里进行一轮新的 Codex 对话
-4. 观察小部件：
-   - 右上角从 `未接入` / `待命中` 变成 `工作中`
-   - 中间出现该轮回答提炼出的 `phase + details`
-
-如果没有接入成功：
-
-- 自动接入失败时，会显示 `未接入`
-- 已接入但当前没有 Codex 进程时，会显示 `暂无 Codex 进程`
-- 已接入且有 `status.json` 但当前项目没有匹配 session 时，会显示 `待命中`
-
-## 相关命令
-
-```bash
-npm test
-npm run build
-npm run setup:hook
-npm run uninstall:hook
-```
-
-## 状态文件
-
-CodexPin 会把自己的状态写到：
+CodexPin stores its own state under:
 
 ```text
 ~/.codexpin/
@@ -138,34 +102,57 @@ CodexPin 会把自己的状态写到：
       <sessionId>.json
 ```
 
-说明：
+What those files are used for:
 
 - `status.json`
-  是 Electron 读取的汇总索引
+  - summary index consumed by the widget
 - `sessions/<sessionId>.json`
-  保存更完整的 turn 历史
+  - richer per-session history
 - `original-notify.json`
-  保存用户原本的 `notify` 配置，用于回滚
+  - backup of the original Codex notify configuration for rollback and chaining
 
-## 开发者说明
+## Development
 
-主要文件：
+```bash
+npm install
+npm start
+```
 
-- [`scripts/codexpin-cli.js`](D:\Github\CodexPin\scripts\codexpin-cli.js)
-  `setup / uninstall` CLI
-- [`scripts/codexpin-codex-hook.js`](D:\Github\CodexPin\scripts\codexpin-codex-hook.js)
-  源码模式的 Codex `notify` hook 入口
-- [`electron/hookRuntime.js`](D:\Github\CodexPin\electron\hookRuntime.js)
-  打包后 `CodexPin.exe --codex-hook` 的 hook 运行时入口
-- [`electron/installBootstrap.js`](D:\Github\CodexPin\electron\installBootstrap.js)
-  首次启动自动接入逻辑
-- [`scripts/codexpinHookLib.js`](D:\Github\CodexPin\scripts\codexpinHookLib.js)
-  文本分段与状态写入逻辑
-- [`electron/codexpinStatus.js`](D:\Github\CodexPin\electron\codexpinStatus.js)
-  Electron 端状态选择逻辑
+Useful commands:
 
-更详细的设计说明见：
+```bash
+npm test
+npm run build
+npm run setup:hook
+npm run uninstall:hook
+```
 
-- [`docs/codexpin-hook-design.md`](D:\Github\CodexPin\docs\codexpin-hook-design.md)
-- [`docs/codexpin-state-schema.md`](D:\Github\CodexPin\docs\codexpin-state-schema.md)
-- [`docs/tests-checklist.md`](D:\Github\CodexPin\docs\tests-checklist.md)
+Notes:
+
+- `npm start` launches the Electron widget in source mode
+- source mode also tries to wire the current app entry into Codex `notify`
+- `npm run build` creates the Windows installer and unpacked app
+
+## Main Files
+
+- `scripts/codexpin-cli.js`
+  - manual setup / uninstall CLI
+- `scripts/codexpin-codex-hook.js`
+  - source-mode Codex hook entry
+- `electron/hookRuntime.js`
+  - packaged `CodexPin.exe --codex-hook` entry
+- `electron/installBootstrap.js`
+  - auto-install bootstrap on app launch
+- `scripts/codexpinHookLib.js`
+  - hook-side status writing and summary logic
+- `electron/codexpinStatus.js`
+  - widget-side session selection and state computation
+- `electron/codexRolloutLive.js`
+  - live rollout parsing for segments and rate limits
+
+## More Docs
+
+- [`docs/codexpin-hook-design.md`](./docs/codexpin-hook-design.md)
+- [`docs/codexpin-state-schema.md`](./docs/codexpin-state-schema.md)
+- [`docs/tests-checklist.md`](./docs/tests-checklist.md)
+- [`docs/solution.md`](./docs/solution.md)
