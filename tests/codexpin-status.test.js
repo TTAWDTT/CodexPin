@@ -301,6 +301,88 @@ function testFallsBackToHookSummaryAfterTaskComplete() {
   assert.strictEqual(result.elapsedSeconds, 22);
 }
 
+function testStopsWorkingWhenTurnIsAborted() {
+  const rootDir = createTempRoot();
+  const codexRoot = createTempRoot();
+  const startedAt = Date.parse('2026-03-16T02:29:50.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: Date.parse('2026-03-16T02:29:40.000Z'),
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt,
+        endedAt: null,
+        status: 'active',
+        lastEvent: {
+          timestamp: Date.parse('2026-03-16T02:29:40.000Z'),
+          phase: '上一轮已完成',
+          details: ['不该覆盖已中断的新回合'],
+          rawMessagePreview: 'previous',
+          turnId: 'turn-old',
+        },
+      },
+    },
+  });
+
+  writeRollout(codexRoot, 'latest', [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:29:50.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'latest',
+        timestamp: '2026-03-16T02:29:50.000Z',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'turn_context',
+      payload: {
+        turn_id: 'turn-current',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:05.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        name: 'shell_command',
+        input: '{"command":"bun run start"}',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:06.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'turn_aborted',
+        turn_id: 'turn-current',
+        reason: 'interrupted',
+      },
+    }),
+  ]);
+
+  const result = getSessionStatus({
+    rootDir,
+    codexRoot,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T02:30:07.000Z'),
+    detectCodexProcess: () => ({
+      hasCodexProcess: true,
+    }),
+  });
+
+  assert.strictEqual(result.isActive, false);
+  assert.strictEqual(result.statusText, '待命中');
+  assert.strictEqual(result.phase, '已中断');
+  assert.deepStrictEqual(result.details, ['本轮任务已被手动中断']);
+  assert.strictEqual(result.elapsedSeconds, 6);
+}
+
 function testKeepsWorkingWhenLatestTurnHasNotCompletedYet() {
   const rootDir = createTempRoot();
   const codexRoot = createTempRoot();
@@ -514,6 +596,7 @@ function run() {
   testMatchesWindowsPathsAndSelectsLatestSession();
   testPrefersLiveRolloutWhileSessionIsActive();
   testFallsBackToHookSummaryAfterTaskComplete();
+  testStopsWorkingWhenTurnIsAborted();
   testKeepsWorkingWhenLatestTurnHasNotCompletedYet();
   testExposesRateLimitsFromLiveRollout();
   testOverridesStaleIdleSummaryWhenNoCodexProcessExists();

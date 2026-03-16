@@ -146,6 +146,46 @@ function testParseRolloutLinesExtractsRateLimits() {
   });
 }
 
+function testParseRolloutLinesMarksAbortedTurnAsTerminal() {
+  const lines = [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'turn_context',
+      payload: {
+        turn_id: 'turn-1',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:04.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        name: 'shell_command',
+        input: '{"command":"bun run start"}',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:06.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'turn_aborted',
+        turn_id: 'turn-1',
+        reason: 'interrupted',
+      },
+    }),
+  ];
+
+  const result = parseRolloutLines(lines);
+
+  assert.strictEqual(result.currentTurnId, 'turn-1');
+  assert.strictEqual(result.currentTurnCompleted, true);
+  assert.strictEqual(result.currentTurnCompletedAt, Date.parse('2026-03-16T02:30:06.000Z'));
+  assert.strictEqual(result.isTerminal, true);
+  assert.strictEqual(result.phase, '已中断');
+  assert.deepStrictEqual(result.details, ['本轮任务已被手动中断']);
+}
+
 function testFindLatestRolloutFileForSession() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codexpin-rollout-'));
   const sessionsRoot = path.join(base, 'sessions');
@@ -179,6 +219,7 @@ function run() {
   testParseRolloutLinesFallsBackToToolCall();
   testParseRolloutLinesTracksOpenTurn();
   testParseRolloutLinesExtractsRateLimits();
+  testParseRolloutLinesMarksAbortedTurnAsTerminal();
   testFindLatestRolloutFileForSession();
   console.log('All Codex rollout live tests passed.');
 }

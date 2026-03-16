@@ -4,6 +4,7 @@ const path = require('path');
 const { summarizeAssistantMessage } = require('../scripts/codexpinHookLib');
 
 const DISPLAY_PRIORITY = {
+  turn_aborted: 4,
   agent_message: 3,
   tool_call: 2,
   assistant_message: 1,
@@ -169,6 +170,22 @@ function makeToolDisplay(payload, timestampMs) {
   };
 }
 
+function makeTurnAbortedDisplay(payload, timestampMs) {
+  const reason = payload?.reason || 'interrupted';
+  const detail =
+    reason === 'interrupted'
+      ? '本轮任务已被手动中断'
+      : `本轮任务已中断（${clampText(String(reason), 40)}）`;
+
+  return {
+    phase: '已中断',
+    details: [detail],
+    rawMessagePreview: detail,
+    sourceType: 'turn_aborted',
+    sourceTimestampMs: timestampMs,
+  };
+}
+
 function chooseDisplayCandidate(candidates) {
   return candidates
     .filter(Boolean)
@@ -191,6 +208,7 @@ function parseRolloutLines(lines) {
     currentTurnCompleted: false,
     currentTurnCompletedAt: 0,
     rateLimits: null,
+    latestTerminalEvent: null,
     latestAgentMessage: null,
     latestToolCall: null,
     latestAssistantMessage: null,
@@ -250,6 +268,24 @@ function parseRolloutLines(lines) {
       continue;
     }
 
+    if (entry.type === 'event_msg' && payload.type === 'turn_aborted') {
+      state.terminalMs = Math.max(state.terminalMs, timestampMs);
+      const abortedTurnId = payload.turn_id || payload.turnId || null;
+      if (!state.currentTurnId && abortedTurnId) {
+        state.currentTurnId = abortedTurnId;
+      }
+      if (!state.currentTurnId || !abortedTurnId || abortedTurnId === state.currentTurnId) {
+        state.currentTurnCompleted = true;
+        state.currentTurnCompletedAt = timestampMs;
+      }
+      const candidate = makeTurnAbortedDisplay(payload, timestampMs);
+      state.latestTerminalEvent = chooseDisplayCandidate([
+        state.latestTerminalEvent,
+        candidate,
+      ]);
+      continue;
+    }
+
     if (
       entry.type === 'response_item' &&
       (payload.type === 'custom_tool_call' || payload.type === 'function_call')
@@ -279,6 +315,7 @@ function parseRolloutLines(lines) {
   }
 
   const display = chooseDisplayCandidate([
+    state.latestTerminalEvent,
     state.latestAgentMessage,
     state.latestToolCall,
     state.latestAssistantMessage,
