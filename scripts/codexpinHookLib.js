@@ -3,6 +3,31 @@ const os = require('os');
 const path = require('path');
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DETAIL_MAX_LENGTH = 80;
+
+function normalizeDisplayLine(line) {
+  if (!line || typeof line !== 'string') return '';
+
+  let normalized = line.trim();
+  if (!normalized) return '';
+
+  // 去掉常见的 Markdown 标题、引用、列表、编号等前缀
+  normalized = normalized.replace(/^(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+[\.\)]\s+)/, '');
+
+  // 去掉整行粗体或强调包裹
+  normalized = normalized.replace(/^\*\*(.+)\*\*$/, '$1');
+  normalized = normalized.replace(/^__(.+)__$/, '$1');
+  normalized = normalized.replace(/^\*(.+)\*$/, '$1');
+  normalized = normalized.replace(/^_(.+)_$/, '$1');
+
+  return normalized.trim();
+}
+
+function clampDetail(text) {
+  if (!text) return '';
+  if (text.length <= DETAIL_MAX_LENGTH) return text;
+  return `${text.slice(0, DETAIL_MAX_LENGTH - 3).trimEnd()}...`;
+}
 
 /**
  * 提炼助手回复为：phase + details[] + 原文预览。
@@ -35,18 +60,24 @@ function summarizeAssistantMessage(raw) {
     };
   }
 
-  const stripPrefix = (line) => {
-    // 去掉常见的 Markdown 标题 / 列表前缀
-    const cleaned = line.replace(/^([#>*\-\d\.\)\s]+)/, '').trim();
-    return cleaned || line;
-  };
+  const normalizedLines = lines
+    .map((line) => normalizeDisplayLine(line))
+    .filter(Boolean);
 
-  const phase = stripPrefix(lines[0]);
+  if (normalizedLines.length === 0) {
+    return {
+      phase: '',
+      details: [],
+      rawMessagePreview,
+    };
+  }
+
+  const phase = normalizedLines[0];
   const details = [];
 
-  for (let i = 1; i < lines.length && details.length < 2; i += 1) {
-    const text = stripPrefix(lines[i]);
-    if (text) {
+  for (let i = 1; i < normalizedLines.length && details.length < 2; i += 1) {
+    const text = clampDetail(normalizedLines[i]);
+    if (text && text !== phase) {
       details.push(text);
     }
   }
@@ -273,8 +304,8 @@ function updateCodexPinStateFromEvent(event, options = {}) {
 }
 
 module.exports = {
+  normalizeDisplayLine,
   summarizeAssistantMessage,
   deriveTitleFromInputMessages,
   updateCodexPinStateFromEvent,
 };
-

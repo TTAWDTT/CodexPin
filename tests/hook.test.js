@@ -42,6 +42,44 @@ function testSummarizeAssistantMessage() {
   );
 }
 
+function testSummarizeMarkdownBoldAndLongDetail() {
+  const raw = [
+    '**实装 CodexPin 状态同步**',
+    '- 这是一条非常长非常长非常长非常长非常长非常长非常长非常长非常长的说明文本，需要在 detail 中被安全截断，避免小面板显示过长',
+    '- 第二条细节保留',
+  ].join('\n');
+
+  const { phase, details } = summarizeAssistantMessage(raw);
+
+  assert.strictEqual(
+    phase,
+    '实装 CodexPin 状态同步',
+    'phase 应该去掉 Markdown 粗体包裹',
+  );
+  assert.strictEqual(
+    details.length,
+    2,
+    '应最多返回两条 details',
+  );
+  assert.ok(
+    details[0].length <= 80,
+    '超长 detail 应被截断到小面板可读长度',
+  );
+  assert.strictEqual(details[1], '第二条细节保留');
+}
+
+function testSummarizeSingleLineMessage() {
+  const raw = '已经完成 Electron 状态桥接';
+  const { phase, details } = summarizeAssistantMessage(raw);
+
+  assert.strictEqual(phase, '已经完成 Electron 状态桥接');
+  assert.deepStrictEqual(
+    details,
+    [],
+    '单行回复时 details 应为空数组',
+  );
+}
+
 function testUpdateCodexPinStateFromEvent() {
   const rootDir = createTempRoot();
 
@@ -123,9 +161,10 @@ function testUpdateCodexPinStateFromEvent() {
 function run() {
   console.log('Running Codex hook tests...');
   testSummarizeAssistantMessage();
+  testSummarizeMarkdownBoldAndLongDetail();
+  testSummarizeSingleLineMessage();
   testUpdateCodexPinStateFromEvent();
   console.log('All Codex hook tests passed.');
 }
 
 run();
-

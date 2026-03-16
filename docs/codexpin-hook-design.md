@@ -222,3 +222,83 @@ This design gives CodexPin enough signal to:
 - Show “current turn” summaries in the Electron widget,
 - Highlight whether Codex is “working” or “idle”,
 - Do so purely based on local data and officially exposed hooks.
+
+## 7. Text Segmentation Rules
+
+CodexPin does not show the full assistant reply. Instead, it derives a compact
+widget-friendly segment:
+
+1. Split `last-assistant-message` by newline.
+2. Trim whitespace and drop empty lines.
+3. Normalize each line by removing common Markdown wrappers/prefixes:
+   - headings like `## Title`
+   - bullets like `- item`
+   - numbered lists like `1. item`
+   - blockquotes like `> note`
+   - full-line emphasis like `**Title**`
+4. Use the first normalized line as `phase`.
+5. Use the next 1–2 normalized lines as `details[]`.
+6. Clamp each detail line to roughly 80 characters so the widget stays readable.
+7. Preserve the first 400 characters of the raw assistant message as
+   `rawMessagePreview`.
+
+### Example A: Long Summary
+
+Input:
+
+```text
+## 实装 CodexPin hook
+完成了 notify 事件的本地解析与状态落盘。
+面板现在可以从专用状态文件读取最近一轮阶段信息。
+```
+
+Output:
+
+```json
+{
+  "phase": "实装 CodexPin hook",
+  "details": [
+    "完成了 notify 事件的本地解析与状态落盘。",
+    "面板现在可以从专用状态文件读取最近一轮阶段信息。"
+  ]
+}
+```
+
+### Example B: Markdown List
+
+Input:
+
+```text
+**接入 Electron 状态桥接**
+- 新增 codexpin-get-session-status IPC
+- 渲染层轮询 status.json 并映射为小面板
+```
+
+Output:
+
+```json
+{
+  "phase": "接入 Electron 状态桥接",
+  "details": [
+    "新增 codexpin-get-session-status IPC",
+    "渲染层轮询 status.json 并映射为小面板"
+  ]
+}
+```
+
+### Example C: One-Line Reply
+
+Input:
+
+```text
+已经完成本地 hook 配置修复
+```
+
+Output:
+
+```json
+{
+  "phase": "已经完成本地 hook 配置修复",
+  "details": []
+}
+```
