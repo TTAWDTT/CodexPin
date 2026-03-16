@@ -168,6 +168,57 @@ function testMatchesWindowsPathsAndSelectsLatestSession() {
   assert.strictEqual(result.elapsedSeconds, 10);
 }
 
+function testSelectsLatestSessionGloballyWhenProjectDirIsMissing() {
+  const rootDir = createTempRoot();
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: 30000,
+    sessions: {
+      older: {
+        sessionId: 'older',
+        workingDirectory: 'D:\\Github\\OtherProject',
+        startedAt: 1000,
+        endedAt: null,
+        status: 'active',
+        lastEvent: {
+          timestamp: 12000,
+          phase: '旧项目阶段',
+          details: ['旧项目细节'],
+          rawMessagePreview: 'old',
+          turnId: 't-old',
+        },
+      },
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CurrentProject',
+        startedAt: 20000,
+        endedAt: null,
+        status: 'active',
+        lastEvent: {
+          timestamp: 29000,
+          phase: '全局最新阶段',
+          details: ['全局最新细节'],
+          rawMessagePreview: 'latest',
+          turnId: 't-latest',
+        },
+      },
+    },
+  });
+
+  const result = getSessionStatus({
+    rootDir,
+    projectDir: null,
+    nowMs: 30000,
+  });
+
+  assert.strictEqual(result.integrationState, 'connected');
+  assert.strictEqual(result.hasSession, true);
+  assert.strictEqual(result.sessionId, 'latest');
+  assert.strictEqual(result.phase, '全局最新阶段');
+  assert.deepStrictEqual(result.details, ['全局最新细节']);
+  assert.strictEqual(result.statusText, '工作中');
+}
+
 function testPrefersLiveRolloutWhileSessionIsActive() {
   const rootDir = createTempRoot();
   const codexRoot = createTempRoot();
@@ -594,6 +645,7 @@ function run() {
   testShowsNoCodexProcessWhenHookInstalledButProcessMissing();
   testReturnsIdleWhenProjectHasNoSession();
   testMatchesWindowsPathsAndSelectsLatestSession();
+  testSelectsLatestSessionGloballyWhenProjectDirIsMissing();
   testPrefersLiveRolloutWhileSessionIsActive();
   testFallsBackToHookSummaryAfterTaskComplete();
   testStopsWorkingWhenTurnIsAborted();

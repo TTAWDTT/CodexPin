@@ -56,6 +56,21 @@ function findLatestSessionForDirectory(statusIndex, projectDir) {
   return matches[0];
 }
 
+function findLatestSessionGlobally(statusIndex) {
+  if (!statusIndex || !statusIndex.sessions) return null;
+
+  const sessions = Object.values(statusIndex.sessions);
+  if (sessions.length === 0) return null;
+
+  sessions.sort((a, b) => {
+    const aTs = a?.lastEvent?.timestamp || 0;
+    const bTs = b?.lastEvent?.timestamp || 0;
+    return bTs - aTs;
+  });
+
+  return sessions[0];
+}
+
 function buildNotConnectedState(message) {
   return {
     integrationState: 'not_connected',
@@ -127,10 +142,14 @@ function getSessionStatus(options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const rootDir = options.rootDir || path.join(homeDir, '.codexpin', 'codex-status');
   const codexRoot = options.codexRoot || path.join(homeDir, '.codex');
-  const projectDir = options.projectDir || process.cwd();
+  const projectDir =
+    Object.prototype.hasOwnProperty.call(options, 'projectDir')
+      ? options.projectDir
+      : process.cwd();
   const nowMs = typeof options.nowMs === 'number' ? options.nowMs : Date.now();
   const hookInstalled = Boolean(options.hookInstalled);
   const notConnectedMessage = options.notConnectedMessage || '';
+  const preferGlobalSession = Boolean(options.preferGlobalSession);
   const readProcessState =
     typeof options.detectCodexProcess === 'function'
       ? options.detectCodexProcess
@@ -146,7 +165,10 @@ function getSessionStatus(options = {}) {
     return buildIdleState(processState);
   }
 
-  const session = findLatestSessionForDirectory(statusIndex, projectDir);
+  const session =
+    preferGlobalSession || !projectDir
+      ? findLatestSessionGlobally(statusIndex)
+      : findLatestSessionForDirectory(statusIndex, projectDir);
   if (!session) {
     const processState = readProcessState();
     return buildIdleState(processState);
@@ -230,6 +252,7 @@ function getSessionStatus(options = {}) {
 module.exports = {
   getSessionStatus,
   __internal: {
+    findLatestSessionGlobally,
     normalizePathForMatch,
     loadStatusIndex,
     findLatestSessionForDirectory,

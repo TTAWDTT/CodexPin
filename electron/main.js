@@ -49,6 +49,8 @@ function registerIpcHandlers(storageApi) {
     return getSessionStatus({
       hookInstalled: installState.hookConfigured,
       notConnectedMessage: installState.message,
+      preferGlobalSession: app.isPackaged,
+      projectDir: app.isPackaged ? null : process.cwd(),
     });
   });
 
