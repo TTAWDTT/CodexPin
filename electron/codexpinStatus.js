@@ -2,6 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { getLiveRolloutStatus } = require('./codexRolloutLive');
+
 const ACTIVE_WINDOW_MS = 15 * 1000;
 
 function normalizePathForMatch(input) {
@@ -78,9 +80,44 @@ function buildIdleState() {
   };
 }
 
+function buildDisplayFromHookEvent(lastEvent) {
+  if (!lastEvent || typeof lastEvent !== 'object') return null;
+
+  return {
+    phase: lastEvent.phase || '待命中',
+    details: Array.isArray(lastEvent.details) ? lastEvent.details : [],
+    rawMessagePreview: lastEvent.rawMessagePreview || '',
+    sourceType: 'hook',
+    sourceTimestampMs: lastEvent.timestamp || 0,
+  };
+}
+
+function pickDisplayState({ hookDisplay, liveDisplay, liveIsActive }) {
+  if (liveIsActive && liveDisplay && liveDisplay.phase) {
+    return liveDisplay;
+  }
+
+  if (hookDisplay && hookDisplay.phase) {
+    return hookDisplay;
+  }
+
+  if (liveDisplay && liveDisplay.phase) {
+    return liveDisplay;
+  }
+
+  return {
+    phase: '待命中',
+    details: [],
+    rawMessagePreview: '',
+    sourceType: 'fallback',
+    sourceTimestampMs: 0,
+  };
+}
+
 function getSessionStatus(options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const rootDir = options.rootDir || path.join(homeDir, '.codexpin', 'codex-status');
+  const codexRoot = options.codexRoot || path.join(homeDir, '.codex');
   const projectDir = options.projectDir || process.cwd();
   const nowMs = typeof options.nowMs === 'number' ? options.nowMs : Date.now();
 
@@ -95,9 +132,35 @@ function getSessionStatus(options = {}) {
   }
 
   const lastEventTimestamp = session?.lastEvent?.timestamp || 0;
-  const startedAt = session.startedAt || lastEventTimestamp || nowMs;
-  const terminalTimestamp = session.endedAt || lastEventTimestamp || nowMs;
-  const isActive = nowMs - lastEventTimestamp <= ACTIVE_WINDOW_MS;
+  const liveStatus = getLiveRolloutStatus({
+    codexRoot,
+    sessionId: session.sessionId,
+  });
+
+  const hookDisplay = buildDisplayFromHookEvent(session.lastEvent);
+  const liveIsActive = Boolean(
+    liveStatus &&
+      liveStatus.lastActivityMs &&
+      !liveStatus.isTerminal &&
+      nowMs - liveStatus.lastActivityMs <= ACTIVE_WINDOW_MS,
+  );
+  const display = pickDisplayState({
+    hookDisplay,
+    liveDisplay: liveStatus,
+    liveIsActive,
+  });
+
+  const startedAt =
+    liveStatus?.sessionStartedAt || session.startedAt || lastEventTimestamp || nowMs;
+  const terminalTimestamp =
+    session.endedAt ||
+    liveStatus?.terminalMs ||
+    display.sourceTimestampMs ||
+    lastEventTimestamp ||
+    nowMs;
+  const isActive = liveStatus?.lastActivityMs
+    ? liveIsActive
+    : nowMs - lastEventTimestamp <= ACTIVE_WINDOW_MS;
   const elapsedSeconds = Math.max(
     0,
     Math.floor(((isActive ? nowMs : terminalTimestamp) - startedAt) / 1000),
@@ -109,11 +172,13 @@ function getSessionStatus(options = {}) {
     isActive,
     elapsedSeconds,
     statusText: isActive ? '工作中' : '待命中',
-    phase: session?.lastEvent?.phase || '待命中',
-    details: Array.isArray(session?.lastEvent?.details) ? session.lastEvent.details : [],
-    rawMessagePreview: session?.lastEvent?.rawMessagePreview || '',
+    phase: display.phase || '待命中',
+    details: Array.isArray(display.details) ? display.details : [],
+    rawMessagePreview: display.rawMessagePreview || '',
     sessionId: session.sessionId || null,
     turnId: session?.lastEvent?.turnId || null,
+    sourceType: display.sourceType || null,
+    rolloutFilePath: liveStatus?.rolloutFilePath || null,
   };
 }
 
@@ -126,4 +191,3 @@ module.exports = {
     ACTIVE_WINDOW_MS,
   },
 };
-

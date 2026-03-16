@@ -18,6 +18,18 @@ function writeStatus(rootDir, status) {
   );
 }
 
+function writeRollout(codexRoot, sessionId, lines, dateParts = ['2026', '03', '16']) {
+  const rolloutPath = path.join(
+    codexRoot,
+    'sessions',
+    ...dateParts,
+    `rollout-${dateParts.join('-')}T10-00-00-${sessionId}.jsonl`,
+  );
+  fs.mkdirSync(path.dirname(rolloutPath), { recursive: true });
+  fs.writeFileSync(rolloutPath, `${lines.join('\n')}\n`, 'utf8');
+  return rolloutPath;
+}
+
 function testReturnsNotConnectedWithoutStatusFile() {
   const rootDir = createTempRoot();
   const result = getSessionStatus({
@@ -117,13 +129,144 @@ function testMatchesWindowsPathsAndSelectsLatestSession() {
   assert.strictEqual(result.elapsedSeconds, 10);
 }
 
+function testPrefersLiveRolloutWhileSessionIsActive() {
+  const rootDir = createTempRoot();
+  const codexRoot = createTempRoot();
+  const startedAt = Date.parse('2026-03-16T02:29:50.000Z');
+  const hookAt = Date.parse('2026-03-16T02:30:04.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: hookAt,
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt,
+        endedAt: null,
+        status: 'active',
+        lastEvent: {
+          timestamp: hookAt,
+          phase: '最终总结',
+          details: ['这不该在活跃期显示'],
+          rawMessagePreview: 'final',
+          turnId: 't-final',
+        },
+      },
+    },
+  });
+
+  writeRollout(codexRoot, 'latest', [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'latest',
+        timestamp: '2026-03-16T02:29:50.000Z',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:05.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'agent_message',
+        message: '正在运行测试\n\nbun test',
+        phase: 'commentary',
+      },
+    }),
+  ]);
+
+  const result = getSessionStatus({
+    rootDir,
+    codexRoot,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T02:30:08.000Z'),
+  });
+
+  assert.strictEqual(result.isActive, true);
+  assert.strictEqual(result.statusText, '工作中');
+  assert.strictEqual(result.phase, '正在运行测试');
+  assert.deepStrictEqual(result.details, ['bun test']);
+  assert.strictEqual(result.elapsedSeconds, 18);
+}
+
+function testFallsBackToHookSummaryAfterTaskComplete() {
+  const rootDir = createTempRoot();
+  const codexRoot = createTempRoot();
+  const startedAt = Date.parse('2026-03-16T02:29:50.000Z');
+  const hookAt = Date.parse('2026-03-16T02:30:12.000Z');
+
+  writeStatus(rootDir, {
+    version: 1,
+    lastUpdated: hookAt,
+    sessions: {
+      latest: {
+        sessionId: 'latest',
+        workingDirectory: 'D:\\Github\\CodexPin',
+        startedAt,
+        endedAt: hookAt,
+        status: 'active',
+        lastEvent: {
+          timestamp: hookAt,
+          phase: '测试已完成',
+          details: ['输出已经汇总完毕'],
+          rawMessagePreview: 'done',
+          turnId: 't-final',
+        },
+      },
+    },
+  });
+
+  writeRollout(codexRoot, 'latest', [
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'latest',
+        timestamp: '2026-03-16T02:29:50.000Z',
+        cwd: 'D:\\Github\\CodexPin',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:05.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'agent_message',
+        message: '正在运行测试\n\nbun test',
+      },
+    }),
+    JSON.stringify({
+      timestamp: '2026-03-16T02:30:10.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'task_complete',
+      },
+    }),
+  ]);
+
+  const result = getSessionStatus({
+    rootDir,
+    codexRoot,
+    projectDir: 'D:\\Github\\CodexPin',
+    nowMs: Date.parse('2026-03-16T02:30:13.000Z'),
+  });
+
+  assert.strictEqual(result.isActive, false);
+  assert.strictEqual(result.statusText, '待命中');
+  assert.strictEqual(result.phase, '测试已完成');
+  assert.deepStrictEqual(result.details, ['输出已经汇总完毕']);
+  assert.strictEqual(result.elapsedSeconds, 22);
+}
+
 function run() {
   console.log('Running CodexPin status tests...');
   testReturnsNotConnectedWithoutStatusFile();
   testReturnsIdleWhenProjectHasNoSession();
   testMatchesWindowsPathsAndSelectsLatestSession();
+  testPrefersLiveRolloutWhileSessionIsActive();
+  testFallsBackToHookSummaryAfterTaskComplete();
   console.log('All CodexPin status tests passed.');
 }
 
 run();
-
