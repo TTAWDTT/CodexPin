@@ -27,7 +27,8 @@ body {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
   color: #f9fafb;
   background: rgba(15, 23, 42, 0.8);
   border-radius: 16px;
@@ -55,9 +56,11 @@ body {
 .widget-status {
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 3px;
   font-size: 11px;
   color: #e5e7eb;
+  min-height: 0;
 }
 
 /* 保留状态文本样式类名占位，当前不再使用额度低提示色 */

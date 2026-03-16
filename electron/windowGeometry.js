@@ -1,5 +1,5 @@
 const DEFAULT_WIDGET_WIDTH = 300;
-const DEFAULT_WIDGET_HEIGHT = 184;
+const DEFAULT_WIDGET_HEIGHT = 164;
 
 function normalizeWindowBounds(bounds) {
   const normalized = {
