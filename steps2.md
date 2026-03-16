@@ -1,8 +1,8 @@
-- [ ] 任务 1：明确 Codex `notify` 集成范围与约束  
+- [x] 任务 1：明确 Codex `notify` 集成范围与约束  
   要求：梳理 Codex CLI 的 `notify` 调用方式（事件类型、参数格式、触发时机），确认我们只依赖官方 `notify` 能力，不读取未文档化接口；明确支持场景（终端 / IDE / 桌面 Codex 只要共享 ~/.codex 即可共享）；记录与现有 `config.toml` 兼容的修改策略（不破坏已有 notify）。  
   验收指标：形成一份简短说明（可以是 `docs/codexpin-hook-design.md` 中的章节），清楚列出 Codex 会在何时、以何种 JSON 调用我们、我们会对现有 `notify` 做什么（覆盖 / 串联 / 保留），读完后任何开发者都能知道“不依赖 Confirmo”的技术边界。
 
-- [ ] 任务 2：设计 CodexPin 专用状态存储结构  
+- [x] 任务 2：设计 CodexPin 专用状态存储结构  
   要求：定义 `~/.codexpin/codex-status/` 的目录与文件结构，包括：  
   - 汇总文件：`status.json`（包含 version、lastUpdated、sessions 列表）  
   - 每 session 文件：`sessions/<sessionId>.json`（包含 session 元信息与 turn 详情）  
@@ -51,7 +51,7 @@
   - 当当前项目存在匹配 session 时，展示最新 phase/details，并仅在最近事件活跃时显示动态圆点。  
   验收指标：文档中列出这三种环境场景，并说明每种场景下小面板的行为和数据来源，确保正式运行态只依赖 `~/.codexpin`。
 
-- [ ] 任务 8：测试与验证计划  
+- [x] 任务 8：测试与验证计划  
   要求：为 CodexPin hook 方案制定最小可行的测试清单，包括：  
   - 单元测试：给定示例 Codex notify JSON，hook 写出的 `status.json` / `sessions/*.json` 是否符合 schema；  
   - 集成测试：模拟运行 Codex CLI，手动触发一到两轮 `agent-turn-complete`，确认 Electron 面板能在 1–2 秒内显示出对应 phase + details；  
