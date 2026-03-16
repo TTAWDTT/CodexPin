@@ -35,7 +35,7 @@
   - 兼容纯文本 / 富文本（Markdown）情况，并说明不支持的结构如何回退。  
   验收指标：列出至少 3 个真实/模拟的助手回复样例（“长总结”“带列表”“一句话回复”），并展示应用规则后得到的 `phase` 和 `details[]`，符合你心目中“小面板那一段”的视觉预期。
 
-- [ ] 任务 6：设计 Electron 端对 CodexPin 状态的读取与映射  
+- [x] 任务 6：设计 Electron 端对 CodexPin 状态的读取与映射  
   要求：在不写代码的前提下，定义好 Electron 主进程与渲染进程的职责：  
   - 主进程：提供 `codexpin-get-session-status` IPC，读取 `~/.codexpin/codex-status/status.json`，按当前 `cwd` / 项目路径筛选出最近的 session，并返回：`hasSession`、`isActive`、`elapsedSeconds`、`phase`、`details[]`；  
   - 渲染进程：每 1–2 秒调用该 IPC，映射为 UI：  
@@ -44,12 +44,12 @@
     - 中间：`phase` + `details[]`，并用不同颜色和小图标显示（第一行深、后两行浅、动态圆点仅在 active 时 pulsing）。  
   验收指标：在文档中明确描述一次完整的数据流：“Codex 完成一轮 turn → 调用 hook 写入 status.json → Electron 主进程读取 → 渲染进程展示”的时序图或文字流程，任何人照此可以实现 IPC 和 UI 映射。
 
-- [ ] 任务 7：设计与原有 `.codex` 日志方案的兼容/回退策略  
-  要求：考虑用户未运行 `codexpin setup`、或在没有 CodexPin hook 的机器上的行为：  
-  - 当 `~/.codexpin/codex-status/status.json` 不存在或为空时，回退到当前 `.codex` 日志解析方案（从 sessions JSONL 推断最近会话时间与简单文本）；  
-  - 当两者都存在时，优先使用 CodexPin hook 数据；  
-  - 明确回退时 UI 文案和动态效果是否有所区别（例如不显示小绿点动画，只显示“待命/工作中 + 简略文本”。  
-  验收指标：文档中列出三种环境场景（无 hook、有 hook、有 hook + 有 Confirmo），并说明每种场景下小面板的行为和数据来源，避免出现“读错别的项目/日志”的情况。
+- [x] 任务 7：定义无 hook / 无会话时的显式状态策略  
+  要求：考虑用户未运行 `codexpin setup`、或当前项目还没有收到 CodexPin hook 事件时的行为：  
+  - 当 `~/.codexpin/codex-status/status.json` 不存在时，不再回退解析 `.codex`，而是明确显示“未接入 Codex Hook”；  
+  - 当 `status.json` 存在但当前项目没有匹配 session 时，显示“待命中”；  
+  - 当当前项目存在匹配 session 时，展示最新 phase/details，并仅在最近事件活跃时显示动态圆点。  
+  验收指标：文档中列出这三种环境场景，并说明每种场景下小面板的行为和数据来源，确保正式运行态只依赖 `~/.codexpin`。
 
 - [ ] 任务 8：测试与验证计划  
   要求：为 CodexPin hook 方案制定最小可行的测试清单，包括：  

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { createStorage } = require('./storage');
+const { getSessionStatus } = require('./codexpinStatus');
 
 let storage;
 
@@ -38,6 +39,10 @@ async function createWindow(bounds) {
 
   ipcMain.handle('codexpin-save-state', async (_event, state) => {
     await storageApi.saveState(state);
+  });
+
+  ipcMain.handle('codexpin-get-session-status', async () => {
+    return getSessionStatus();
   });
 
   mainWindow.on('move', async () => {

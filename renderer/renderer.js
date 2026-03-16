@@ -1,6 +1,6 @@
 (() => {
   const sessionTimeEl = document.getElementById('session-time');
-  const weeklyRemainingEl = document.getElementById('weekly-remaining');
+  const statusTextEl = document.getElementById('weekly-remaining');
   const statusEls = [
     document.getElementById('status-line-1'),
     document.getElementById('status-line-2'),
@@ -9,14 +9,14 @@
   ];
 
   // Guard: if DOM is not ready for some reason, bail early.
-  if (!sessionTimeEl || !weeklyRemainingEl) return;
+  if (!sessionTimeEl || !statusTextEl) return;
 
   // CodexPinState is attached as a global in state.js
   const state = window.CodexPinState || window.CodexPinStateFactory?.();
   const bridge = window.codexpin;
   if (!state) {
     sessionTimeEl.textContent = '—';
-    weeklyRemainingEl.textContent = '—';
+    statusTextEl.textContent = '—';
     return;
   }
 
@@ -32,11 +32,29 @@
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
 
-  function formatRemaining(weeklyLimitMinutes, weeklyUsedMinutes) {
-    const remaining = Math.max(0, weeklyLimitMinutes - weeklyUsedMinutes);
-    const hours = Math.floor(remaining / 60);
-    const minutes = remaining % 60;
-    return `${hours}h${minutes.toString().padStart(2, '0')}m`;
+  function renderStatusLines(lines, options = {}) {
+    for (let i = 0; i < statusEls.length; i += 1) {
+      const el = statusEls[i];
+      if (!el) continue;
+
+      const text = lines[i] ?? '';
+      el.textContent = text;
+
+      if (!text) {
+        el.className = 'status-line';
+        continue;
+      }
+
+      if (i === 0) {
+        el.className = `status-line status-line--phase${
+          options.active ? ' status-line--active' : ''
+        }`;
+      } else if (i === 1 || i === 2) {
+        el.className = 'status-line status-line--detail';
+      } else {
+        el.className = 'status-line status-line--subtle';
+      }
+    }
   }
 
   function renderFromState() {
@@ -46,25 +64,8 @@
     const elapsedSeconds = isIdle ? 0 : snapshot.session.elapsedSeconds;
     sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
 
-    // 顶栏右侧改为状态显示：工作中 / 待命中（纯本地，不再展示额度）
-    const statusText = isIdle ? '待命中' : '工作中';
-    weeklyRemainingEl.textContent = statusText;
-    weeklyRemainingEl.classList.remove('weekly-remaining--low');
-
-    const lines = snapshot.statusLines;
-    for (let i = 0; i < statusEls.length; i += 1) {
-      const el = statusEls[i];
-      if (!el) continue;
-      el.textContent = lines[i] ?? '';
-      // 状态模块场景下的回退样式：第一行更醒目，其余为细节。
-      if (i === 0) {
-        el.className = 'status-line status-line--phase';
-      } else if (i === 1) {
-        el.className = 'status-line status-line--detail';
-      } else {
-        el.className = 'status-line status-line--subtle';
-      }
-    }
+    statusTextEl.textContent = isIdle ? '待命中' : '工作中';
+    renderStatusLines(snapshot.statusLines, { active: !isIdle });
 
     const root = document.getElementById('widget-root');
     if (root) {
@@ -108,56 +109,43 @@
       topbar.addEventListener('dblclick', () => {
         const current = state.getState().mode || 'full';
         state.setMode(current === 'full' ? 'compact' : 'full');
-        render();
+        renderFromState();
         void saveSnapshot();
       });
     }
 
-    // 点击左侧时间区域，切换会话开始/结束，从而驱动周额度累积。
-    // 周期性从 Codex 会话日志中拉取最新状态并更新 UI。
     async function pollCodex() {
-      if (!bridge || typeof bridge.getCodexSession !== 'function') {
+      if (!bridge || typeof bridge.getSessionStatus !== 'function') {
         renderFromState();
         return;
       }
 
       try {
-        const info = await bridge.getCodexSession();
-        if (!info || !info.hasSession) {
-          // 无活动会话时退回到本地状态渲染。
+        const info = await bridge.getSessionStatus();
+        if (!info) {
           renderFromState();
           return;
         }
 
-        const isIdle = !info.isActive;
-        const elapsedSeconds = info.elapsedSeconds || 0;
-        sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
-        weeklyRemainingEl.textContent = isIdle ? '待命中' : '工作中';
+        if (info.integrationState === 'not_connected') {
+          sessionTimeEl.textContent = '—';
+          statusTextEl.textContent = info.statusText || '未接入';
+        } else {
+          const isIdle = !info.isActive;
+          const elapsedSeconds = info.elapsedSeconds || 0;
+          sessionTimeEl.textContent = isIdle ? '待命' : formatSessionTime(elapsedSeconds);
+          statusTextEl.textContent = info.statusText || (isIdle ? '待命中' : '工作中');
+        }
 
         const root = document.getElementById('widget-root');
         if (root) {
           root.dataset.mode = state.getState().mode || 'full';
         }
 
-        const lines = Array.isArray(info.lines) ? info.lines : [];
-        for (let i = 0; i < statusEls.length; i += 1) {
-          const el = statusEls[i];
-          if (!el) continue;
-          el.textContent = lines[i] ?? '';
-          if (!lines[i]) {
-            el.className = 'status-line';
-            continue;
-          }
-          if (i === 0) {
-            el.className = `status-line status-line--phase${
-              info.isActive ? ' status-line--active' : ''
-            }`;
-          } else if (i === 1) {
-            el.className = 'status-line status-line--detail';
-          } else {
-            el.className = 'status-line status-line--subtle';
-          }
-        }
+        renderStatusLines(
+          [info.phase, ...(Array.isArray(info.details) ? info.details : [])],
+          { active: Boolean(info.isActive) },
+        );
       } catch {
         renderFromState();
       }

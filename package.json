@@ -5,7 +5,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/state.test.js && node tests/hook.test.js && node tests/notify-setup.test.js",
+    "test": "node tests/state.test.js && node tests/hook.test.js && node tests/notify-setup.test.js && node tests/codexpin-status.test.js",
     "lint": "echo \"No linter configured\"",
     "build": "electron-builder"
   },
@@ -22,7 +22,6 @@
   },
   "homepage": "https://github.com/TTAWDTT/CodexPin#readme",
   "devDependencies": {
-    "@iarna/toml": "^3.0.0",
     "electron": "^31.7.7",
     "electron-builder": "^26.8.1"
   },
@@ -35,6 +34,7 @@
     "files": [
       "electron/**/*",
       "renderer/**/*",
+      "scripts/**/*",
       "assets/**/*",
       "package.json"
     ],

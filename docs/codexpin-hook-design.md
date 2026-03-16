@@ -302,3 +302,51 @@ Output:
   "details": []
 }
 ```
+
+## 8. Electron Data Flow
+
+CodexPin’s Electron widget reads only CodexPin-owned state. The intended flow is:
+
+1. Codex completes a turn.
+2. Codex invokes the configured `notify` command with the event JSON.
+3. `codexpin-codex-hook.js` parses the payload and writes
+   `~/.codexpin/codex-status/status.json`.
+4. Electron main process exposes `codexpin-get-session-status` IPC.
+5. That IPC reads `status.json`, filters sessions by the current project
+   directory, and returns:
+   - `hasSession`
+   - `isActive`
+   - `elapsedSeconds`
+   - `statusText`
+   - `phase`
+   - `details[]`
+6. Renderer polls this IPC every 1–2 seconds and maps the result to:
+   - top-left: elapsed session time
+   - top-right: `工作中` / `待命中` / `未接入`
+   - center: `phase` + 1–2 `details`
+
+This keeps the widget fully decoupled from `.codex` internals.
+
+## 9. Behavior Without Hook Data
+
+CodexPin no longer treats `.codex` logs as a fallback rendering source.
+
+Behavior is intentionally explicit:
+
+- **No `~/.codexpin/codex-status/status.json`**
+  - Widget shows `未接入`
+  - Main phase shows `未接入 Codex Hook`
+  - Detail explains that the user should run `codexpin setup`
+
+- **`status.json` exists, but current project has no matching session**
+  - Widget shows `待命中`
+  - Main phase shows `待命中`
+  - Detail explains that the current project has not yet received a Codex hook event
+
+- **Current project has matching session data**
+  - Widget shows the latest `phase` + `details[]`
+  - Pulse animation is enabled only when the latest event is considered active
+
+This avoids mixing two incompatible data models:
+- `.codex` log inference
+- CodexPin hook-derived widget state
